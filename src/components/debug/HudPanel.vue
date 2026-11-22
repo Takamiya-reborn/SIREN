@@ -190,9 +190,8 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
             <ChevronRight class="tri" :class="{ open: open.view }" :size="12" />取景
             <span v-if="!open.view" class="dim">缩放/偏移</span>
           </button>
-          <button class="icon-btn" type="button" title="复位取景三轴"
-            @click="hud.view.set({ zoom: 1, offX: 0, offY: 0 })">
-            <RotateCcw :size="12" />
+          <button class="reset-btn" type="button" title="复位取景三轴" @click="hud.view.set({ zoom: 1, offX: 0, offY: 0 })">
+            <RotateCcw :size="14" />
           </button>
         </div>
         <div class="group-body">
@@ -201,18 +200,27 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
             <input class="inject-range" type="range" min="0.2" max="3" step="0.01" :value="hud.view.zoom"
               @input="hud.view.set({ zoom: +$event.target.value })">
             <span class="debug-pair">×{{ hud.view.zoom.toFixed(2) }}</span>
+            <span class="debug-pair clickable reset-btn" title="复位缩放" @click="hud.view.set({ zoom: 1 })">
+              <RotateCcw :size="14" />
+            </span>
           </div>
           <div class="inject-item">
             <span class="debug-pair">横向偏移</span>
             <input class="inject-range" type="range" min="-0.5" max="0.5" step="0.005" :value="hud.view.offX"
               @input="hud.view.set({ offX: +$event.target.value })">
             <span class="debug-pair">{{ (hud.view.offX * 100).toFixed(1) }}%</span>
+            <span class="debug-pair clickable reset-btn" title="复位横向偏移" @click="hud.view.set({ offX: 0 })">
+              <RotateCcw :size="14" />
+            </span>
           </div>
           <div class="inject-item">
             <span class="debug-pair">纵向偏移</span>
             <input class="inject-range" type="range" min="-0.5" max="0.5" step="0.005" :value="hud.view.offY"
               @input="hud.view.set({ offY: +$event.target.value })">
             <span class="debug-pair">{{ (hud.view.offY * 100).toFixed(1) }}%</span>
+            <span class="debug-pair clickable reset-btn" title="复位纵向偏移" @click="hud.view.set({ offY: 0 })">
+              <RotateCcw :size="14" />
+            </span>
           </div>
         </div>
       </div>
@@ -405,7 +413,7 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
           <div class="group-body gates-body">
             <div v-for="g in hud.machine.gates" :key="'g' + g.zone + g.param" class="gate">
               <span class="gate-head">{{ g.zone }} {{ g.param }}={{ fmtValue(g.value) }}（{{ ringText(g, hud.rings)
-                }}）</span>
+              }}）</span>
               <span class="gate-track">
                 <span v-for="(b, i) in g.bands" :key="i" class="gate-band"
                   :class="{ hit: g.value >= b.lo && g.value < b.hi }"
@@ -711,6 +719,30 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
 
 .inject-check {
   accent-color: #9fd9bd;
+}
+
+/* 取景复位钮共用外壳（三轴单项 + 三轴合复位）：圆角正方形常显，深色底 + 悬停亮起 */
+.reset-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  border: 1px solid #4a4a52;
+  border-radius: 6px;
+  background: #2a2a30;
+  color: #b8b8c0;
+  line-height: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s, color 0.15s;
+}
+
+.reset-btn:hover {
+  background: #3a3a42;
+  color: #e8e8ee;
 }
 
 /* 注入组头行：开合按钮 + 只看变化中开关 + 统计同排（面板穿透，行内控件显式接管） */

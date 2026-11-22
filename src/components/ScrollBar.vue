@@ -3,7 +3,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 /**
  * 自绘滚动条：隐藏原生滚动条（叠加滚动条模式下 ::-webkit-scrollbar 会被浏览器忽略），
- * 按滚动位置画半透明滑块。根节点 flex:1 占满父容器的剩余高度（父容器需为 flex 列布局），
+ * 按滚动位置画半透明滑块。滑块自动隐藏：滚动或悬停时出现，停止后延时淡出，拖拽期间保持。
+ * 根节点 flex:1 占满父容器的剩余高度（父容器需为 flex 列布局），
  * 滑轨只覆盖本组件区域——面板里标题/搜索框等固定区不参与滚动与滑轨。
  * 滑轨距容器右缘 inset px，用于避开骑在边缘的开关把手。滑块可拖拽，滑轨空白处点击跳转。
  */
@@ -17,20 +18,33 @@ const props = defineProps({
 const viewport = ref(null)
 const content = ref(null)
 const scrollable = ref(false)
+const active = ref(false)
 const thumbH = ref(0)
 const thumbTop = ref(0)
 
 const MARGIN = 4 // 滑轨上下留白
+const HIDE_DELAY = 900 // 停止滚动后滑块开始淡出的延时（ms）
 let trackH = 0
 let ro = null
 let drag = null
+let hideTimer = null
+
+function reveal() {
+  active.value = true
+  clearTimeout(hideTimer)
+  hideTimer = setTimeout(() => (active.value = false), HIDE_DELAY)
+}
 
 function update() {
   const el = viewport.value
   if (!el) return
   const maxScroll = el.scrollHeight - el.clientHeight
   scrollable.value = maxScroll > 0
-  if (!scrollable.value) return
+  if (!scrollable.value) {
+    active.value = false
+    return
+  }
+  reveal()
   trackH = el.clientHeight - MARGIN * 2
   thumbH.value = Math.max(28, Math.round((trackH * el.clientHeight) / el.scrollHeight))
   thumbTop.value = MARGIN + (el.scrollTop / maxScroll) * (trackH - thumbH.value)
@@ -38,6 +52,8 @@ function update() {
 
 function onThumbDown(e) {
   drag = { y: e.clientY, top: viewport.value.scrollTop }
+  active.value = true
+  clearTimeout(hideTimer) // 拖拽期间不淡出
   e.currentTarget.setPointerCapture(e.pointerId)
 }
 
@@ -51,6 +67,18 @@ function onThumbMove(e) {
 
 function onThumbUp() {
   drag = null
+  reveal()
+}
+
+function onEnter() {
+  reveal()
+}
+
+function onLeave() {
+  if (!drag) {
+    clearTimeout(hideTimer)
+    active.value = false
+  }
 }
 
 function onTrackDown(e) {
@@ -68,17 +96,20 @@ onMounted(() => {
   ro.observe(content.value)
 })
 
-onBeforeUnmount(() => ro?.disconnect())
+onBeforeUnmount(() => {
+  ro?.disconnect()
+  clearTimeout(hideTimer)
+})
 </script>
 
 <template>
-  <div class="custom-scroll">
+  <div class="custom-scroll" @pointerenter="onEnter" @pointerleave="onLeave">
     <div ref="viewport" class="viewport" @scroll="update">
       <div ref="content" class="content">
         <slot />
       </div>
     </div>
-    <div v-show="scrollable" class="track" :style="{ right: inset + 'px', width: width + 'px' }"
+    <div v-show="scrollable" class="track" :class="{ active }" :style="{ right: inset + 'px', width: width + 'px' }"
       @pointerdown="onTrackDown">
       <div class="thumb" :style="{ top: thumbTop + 'px', height: thumbH + 'px', width: width + 'px' }"
         @pointerdown="onThumbDown" @pointermove="onThumbMove" @pointerup="onThumbUp" @pointercancel="onThumbUp" />
@@ -111,6 +142,14 @@ onBeforeUnmount(() => ro?.disconnect())
   top: 0;
   bottom: 0;
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+
+.track.active {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .thumb {
