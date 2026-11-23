@@ -126,7 +126,45 @@ export class InteractionRuntime {
     for (const [pid, [, end]] of Object.entries(carry)) {
       if (this.carryPids.has(pid)) this.node.set(pid, end)
     }
+    // 等待态（idle 组）落账：idle 家族布局参数按 moc 默认归位（见 _idleFamilyDriven）
+    if (this.pendingIdle) this._settleIdleFamily(clipName)
     this._syncBoundary(clipName, state, carry, seq)
+  }
+
+  /**
+   * idle 家族布局参数的等待态归位：idle 组各变体用自己的曲线钉住一套场景布局参数
+   * （如 suweiaitongmeng_3 的 Param9 布局号，idle1~16 各钉 1~-1），缺席的变体以 moc 默认为
+   * 布局（游戏端 Write Defaults 语义：等待态下家族参数不被当前变体驱动即回默认）。
+   * 没有这条，反应动作写入的布局值会经表外补账滞留进节点、再被复位缓动钉死——
+   * 反应（钉 15）结束回 idle0（不驱动 Param9）后触点标记永久停在反应布局（屏外），
+   * 命中 0 个、交互全灭。只归位 idle 家族自己的参数：idle 组从不驱动的持久化参数
+   * （菜单摊开等跨动作状态）不受影响，仍按 carry 语义保留。
+   * 缓动目标在 beginSmoothReset 里读节点，本方法须先于其落账（同一次 motionStart 里
+   * 本方法挂 trackMotionStart、缓动挂 mount.js 监听器，注册序保证先后）。
+   */
+  _settleIdleFamily(clipName) {
+    const family = this.idleFamilyDriven()
+    if (!family?.size) return
+    const driven = this._drivenSet?.get(clipName) ?? null
+    for (const pid of family) {
+      if (driven?.has(pid)) continue
+      if (!this.preservePids.has(pid)) continue
+      this.node.set(pid, this.paramDefault(pid))
+    }
+  }
+
+  /** idle 组全变体的驱动参数并集（布局参数家族名单；逐变体驱动集来自 loadMotionDriven 预热，未预热齐时返回已知的部分集，空集则跳过归位——挂载初期的首轮落账由 resetParameters 硬写兜底） */
+  idleFamilyDriven() {
+    if (this._idleFamily) return this._idleFamily
+    const defs = this.model.internalModel.settings?.motions?.[this.idleGroup] ?? []
+    const family = new Set()
+    for (const def of defs) {
+      const clip = (def?.File ?? '').split('/').pop()?.replace(/\.motion3\.json$/, '')
+      const set = clip ? this._drivenSet?.get(clip) : null
+      if (set) for (const pid of set) family.add(pid)
+    }
+    if (family.size) this._idleFamily = family
+    return family
   }
 
   /** 表外补全：节点跟随本支动作**实际驱动**的状态/摆位参数。state/carry 表剔除了首末均为 0 的开关（extract.js clipBoundaryState），但那正是有向图的回零边——基础 idle 曲线恒 0 而无表项时，节点学不到"已归零"，起播缓动会按滞留的旧节点值把开关再次摆出；对表里没记的参数按 motion3 真实末值补账，边界数据与提取同源（同一份 motion3 文件），无需重新提取 */

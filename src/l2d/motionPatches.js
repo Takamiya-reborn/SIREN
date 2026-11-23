@@ -127,22 +127,63 @@ export function installMotionPatches(ctx) {
         );
         // 回落选支读数：变体号/解析出的 clip/组内下标；负数（文件名没对上）会 Math.max 退化到下标 0（基础 idle）
         const index = Math.max(base, 0);
-        // 读数进 HUD（ctx.idleFallback，hud.js 汇编）：路径上的机器排查不依赖 console
-        activeCtx.idleFallback = {
-          source: "engine",
-          clip,
-          index,
-          variant: activeCtx.orch.idleIndex,
-          degraded: base < 0,
-          at: Date.now(),
-        };
         console.log(
           `[l2d:idle] 回落→${clip} 下标${index}${base < 0 ? "（文件名未命中,退化基础idle）" : ""}`,
         );
         const playing = this.startMotion(group, index, priority);
         Promise.resolve(playing).then((ok) => {
-          if (!ok)
-            console.warn("[l2d:idle] 回落被引擎拒绝:", clip, "下标", index);
+          if (!ok) {
+            // 同组 idle 已在队 = 显式回播（noteMotionFinish 的 playAction('idle')）抢跑赢了竞速，
+            // 回落扑空属正常败北：静默退出、不写回落读数（在播的是显式那支，engine:idle 会误导排查）；
+            // 其余拒播（队列空/不同组在播）才是异常，告警 + reserve 滞留自愈
+            if (
+              this.state.currentGroup === group &&
+              !this.queueManager.isFinished()
+            ) {
+              return;
+            }
+            console.warn(
+              "[l2d:idle] 回落被引擎拒绝:",
+              clip,
+              "下标",
+              index,
+              "state:",
+              JSON.stringify({
+                currentGroup: this.state.currentGroup,
+                currentPriority: this.state.currentPriority,
+                reservedGroup: this.state.reservedGroup,
+                reservedIndex: this.state.reservedIndex,
+                reservedIdleGroup: this.state.reservedIdleGroup,
+                reservedIdleIndex: this.state.reservedIdleIndex,
+                queueEmpty: this.queueManager.isFinished(),
+              }),
+            );
+            // reserve 滞留自愈：reserve 占住（本组）而动作队列已空 = 加载段失败/被吞后
+            // 状态机永久拒播，idle 从此不再起播、模型冻死；清 reserve 后按 FORCE 重试
+            const stuck =
+              this.state.reservedGroup === group ||
+              this.state.reservedIdleGroup === group;
+            if (stuck && this.queueManager.isFinished()) {
+              this.state.setReserved(undefined, undefined, 0);
+              this.state.setReservedIdle(undefined, undefined);
+              Promise.resolve(this.startMotion(group, index, 3)).then((ok2) => {
+                console.warn(
+                  "[l2d:idle] reserve 自愈重试:",
+                  ok2 ? "成功" : "仍失败",
+                );
+              });
+            }
+            return;
+          }
+          // 回落确实接管了 idle 才落读数（hud.js 汇编）：显式回播赢竞速的场合保留其 explicit 读数
+          activeCtx.idleFallback = {
+            source: "engine",
+            clip,
+            index,
+            variant: activeCtx.orch.idleIndex,
+            degraded: base < 0,
+            at: Date.now(),
+          };
         });
         return playing;
       }

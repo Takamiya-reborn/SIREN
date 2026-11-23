@@ -368,6 +368,16 @@ export class DragOrchestrator {
     if (wasPlaying && name && !idle) this.playAction?.('idle')
   }
 
+  // ---- 下棋小游戏（type 15/16；live2d.lua EVENT_GAME_XIAQI + live2dextend.lua XiaQi 系列，已破译未实现）----
+  // 接口面：type 15 点击入口 = machine.applyClickTrigger 的 type15 分支（不走 applyTrigger/不发 DRAG_CLICK 通知）；type 16 结果机 = triggers.js 的占位空处理器。实现时在此落棋盘控制器，机器侧只需补一件事：角色应手的 setTargetValueDelay 语义（目标立即落账 + delayTargetTime 冻结参数平滑 0.2s，游戏 DD:579-583/804-813，落在 step 平滑段的最前，早于拖拽落 target 之后、平滑之前）。
+  // 规则全文（实现时照此落，原文锚点 = live2dextend.lua + live2d.lua:359-398）：
+  // - 棋盘：全部 type 15 机即九宫格，actionTrigger.index 1..9（suweiaitongmeng_3 = TouchDrag14..22 / a1..c3，行字母列数字），子的状态记在参数 target 上：0 空 / +1 玩家 / -1 角色；连线表 8 条 [[1,2,3],[4,5,6],[7,8,9],[1,4,7],[2,5,8],[3,6,9],[1,5,9],[3,5,7]]（live2dextend.lua 顶部）。
+  // - 点击（EVENT_GAME_XIAQI）：全局 1s 限频（Live2D.xiaqiLimitTime，占格子的无效点击同样消耗窗口）→ 玩家回合判定 CheckXiaQiFirst：target>0 计数 ≤ target<0 计数，且点击格现值 ==0 才落 +1（setTargetValue）→ 立即查终局 CheckXiaQiFinish：任一连线 target 全 +1 = 赢、全 -1 = 输、满盘 = 平（win=true）→ 终局则 0.5s 延迟（onDelayTick）写共享 COMMON_XIAQI_RESULT 并 return（角色不再应手）。
+  // - 角色应手 CheckXiaQiLast：target<0 计数 < target>0 计数时，从 target==0 的空格里随机挑一台 setTargetValueDelay(-1, 0.2)（按 target 数子，终局判定立刻能看到这颗子）→ 再查终局，终局同样 0.5s 延迟写 result。
+  // - type 16 结果机（DD:1259-1268）：result 非 null 且 (win==1) === result 的那台在冷却到期后 applyTrigger 播 action（win=1→touch_idle6 赢/平、win=0→touch_idle9 输）+ activeData（idle 变体 7/10 + ignore 名单挡掉大部分反应）。原文清账回调实参恒 nil（CT:330 slot12，if-guard 永假）——重发实际靠重复 idle 豁免挡住（播后 idleIndex 已 =activeData.idle）；移植按意图取"播出成功才清 result"，豁免/失败不清（与原文的跳过路径同形）。
+  // - 清盘：9 台机器的 listener_data（PLAY，change=[[2,["touch_idle8","touch_idle10"],0]]）在 touch_idle8/10 播出时把全部格子 target 归 0——联动层已实现，无需新代码。
+  xiaqiClick(cell) {}
+
   // ---- 每帧驱动与参数图层 ----
 
   step(dt) {

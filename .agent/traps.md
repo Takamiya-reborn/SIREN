@@ -30,6 +30,10 @@
 - 摆位机同支动作重播被引擎拒绝 → 次序须先切变体后播（actions.js `playMotion()`）。
 - 摸头/摸身起播回不到正面 → 表外补账只跳过 applyEnd 真正落账的表项，carryPids 类参数须照写不照表（interaction/runtime.js `applyEnd()` 内 seq 守卫段）。
 
+## 逆向 / 原文读取类
+
+- 反编译里 `onEventCallback(EVENT, nil, callback)` 的 `if slot0 then … end` 回调副作用看着会执行、实际恒不执行 → 控制层调用回调一律传固定 nil（live2d.lua 控制层 EVENT_ACTION_APPLY 分支尾部，局部 slot12 从未赋值）：type 16 清终局 result、type 3 收尾清标记等分支游戏本体从未跑过；type 16 防重发实际靠重复 idle 豁免兜住，不靠清账。读 Lua 遇同款 callback + if-guard 结构按「永不执行」理解，port 时按意图实现须另行取舍（机制详述 docs/azurlane.md §6.3）。
+
 ## Ani / spine 类
 
 - 同名 atlas 二次 add 抛 "already exists" → pixi-spine ESM import 已自动注册 Loader 插件，手动再挂即重复（spineMount.js `mountSpineModel()`）。

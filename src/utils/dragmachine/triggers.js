@@ -1,6 +1,6 @@
 /** 触发类型 -> 处理器映射表（扩展点：往表里加条目即接入新类型）。处理器签名 (machine, now, dt) -> void，在 step 里每帧调用，自身负责触发条件判定（冷却由 triggerAble 统一前置过滤）。
  * type 2/6/9/11（点击/连点/点参/点区间）不在此表：它们的触发由松手判定 + clickTriggerTime 确认窗口驱动（见 onUp/applyClickTrigger），与游戏 checkClickAction 对四种类型共用的行为一致。
- * 后续按 live2ddrag.lua 的 updateTrigger 逐型补齐：14 区间上下行触发、15/16 下棋小游戏（参照 Live2DExtend：九宫格 3×3 连线判定、按 getParameterTarget() ±1 记子）等，等有实际皮肤再实测。
+ * 后续按 live2ddrag.lua 的 updateTrigger 逐型补齐：14 区间上下行触发等。type 15/16 下棋小游戏已破译、留接口未实现——点击入口在 machine.applyClickTrigger type15 分支，规则全文与实现要点注释在 orchestrator.xiaqiClick（首个实装皮肤 suweiaitongmeng_3）。
  */
 export const TRIGGER_HANDLERS = {
   /** type 1 DRAG_TIME_ACTION（DD:1006-1021）：按住且参数现值进 num 邻域（|parameterValue-num| < |num|*0.25，用当前值、不做 fix）持续 time 秒触发；time/num 缺省回落 action_list 当前项（DD:992-1004，Lua 1-based 取 -1）。
@@ -111,4 +111,7 @@ export const TRIGGER_HANDLERS = {
       m.animationPlayApply = true
     }
   },
+  /** type 16 DRAG_GAME_XIAQI_RESULT（DD:1259-1268）占位空处理器：下棋终局结果机，未实现（同 type 7 的占位先例，压掉未实现告警）。
+   * 语义：共享终局 result（orchestrator.xiaqiResult，未实现）与 win 标记匹配时 applyTrigger 播 action（win=1→touch_idle6 赢/平、win=0→touch_idle9 输）+ activeData 切 idle 变体 7/10。实现要点见 orchestrator.xiaqiClick 注释。 */
+  16() {},
 }

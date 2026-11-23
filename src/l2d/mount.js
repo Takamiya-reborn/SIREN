@@ -10,6 +10,8 @@ import { installPalette } from "./palette";
 import { loadAmbient } from "../utils/ambient";
 import { DragOrchestrator, loadL2dConfig } from "../utils/dragmachine";
 import { InteractionRuntime, loadInteraction } from "../utils/interaction";
+import { snapshotAfterMotion } from "./motionDiff";
+import { anchorCulpritSweep } from "../utils/interaction/hints";
 
 /**
  * @param ctx 舞台上下文（见 L2dStage.vue）：要求 ctx.camera（camera.js）、
@@ -38,10 +40,18 @@ async function mountModelInner(ctx, url) {
   // 挂载时序令牌：挂载内有多个 await（Live2DModel.from 要数秒），快速连续切皮肤时两个挂载交错——先启动的后完成，会把 ctx.model/runtime/orch 覆盖成旧实例、新旧两只模型同时滞留舞台（后加者在上面），交互/HUD/复位全绑到看不见的那只
   // 每次挂载自增，任何 await 醒来发现令牌过期就丢弃自己的模型直接退出
   const seq = (ctx._mountSeq = (ctx._mountSeq ?? 0) + 1);
-  const stale = () => seq !== ctx._mountSeq;
+  const t0 = performance.now();
   const app = ctx.app;
+  // 令牌过期含舞台销毁：快速切皮肤会重建舞台组件（旧 app.destroy 置空 stage），
+  // 旧挂载的 await 醒来必须随之丢弃，否则往已销毁的 app 上 addChild 崩帧
+  const stale = () => seq !== ctx._mountSeq || ctx.app !== app;
+  // 形态切换的换入组（App 换挂前经 stage.setEntryGroup 登记）：本挂载独占消费一次，
+  // 揭幕瞬间起播（change_in/login 先于皮肤可见），未登记/组缺失走基础 idle 入口
+  const pendingEntry = ctx._entryGroup;
+  ctx._entryGroup = null;
   // per-drawable multiply/screen 渲染补丁（调色板换色的渲染侧，装一次全局生效）
-  installColorPatch();
+  // 差分实验开关：?nopatch=1 跳过调色板渲染补丁（排查锚点形变爆炸是否由补丁的核内改动引出）
+  if (!location.search.includes("nopatch")) installColorPatch();
   ctx.status.value = "加载模型…";
   // 上一次挂载可能死在标记设置与起播之间，残留标记会错切新挂载的首支新 clip
   ctx._entryHardCutClip = null;
@@ -52,10 +62,23 @@ async function mountModelInner(ctx, url) {
   ctx.runtime = null;
   ctx.orch = null;
   ctx.l2dOffset = null;
+  // 形态切换可从 spine 链原地换挂过来：清掉 spine 侧宿主钩子，play()/取景/过渡不再被旧皮肤分流
+  // （旧 spine 模型销毁后 spineData/state 已置 null，残留钩子一碰即抛）
+  ctx._spinePlay = null;
+  ctx._spineFit = null;
+  ctx._spineTransition = null;
+  ctx._spineTrigger = null;
+  ctx._spineExprName = null;
+  // 上一轮换出定格随挂载终结：新模型的 FinishAction→changeActionIdle 链恢复正常
+  ctx._holdPose = null;
   const model = await Live2DModel.from(url, {
     autoInteract: false,
     idleMotionGroup: "idle", // 本项目 idle 组为小写（Cubism 默认是 "Idle"）
   });
+  // 加载耗时埋点：from 含 moc3 解析+贴图下载与解码（切换慢时对照此行与网络面板定位）
+  console.info(
+    `[perf] L2D 模型加载 ${Math.round(performance.now() - t0)}ms (${url})`,
+  );
   if (stale()) {
     model.destroy();
     return;
@@ -76,24 +99,12 @@ async function mountModelInner(ctx, url) {
     model.destroy();
     return;
   }
-  // 动作起播的参数复位改走平滑路径（见 runtime.beginSmoothReset）：瞬跳会毁掉动作交叉渐变的混合起点
-  // 落笔钩子在 runtime 创建后挂（下方 beforeMotionUpdate），这里只登记缓动窗口；窗口取起播 clip 的转场时长（trackMotionStart 尚未结算挂起动作，节点读取时机不变）
+  // 动作起播的参数复位改走平滑路径（见 runtime.beginSmoothReset）：瞬跳会毁掉动作交叉渐变的混合起点。
+  // 本监听器必须后于 InteractionRuntime 的注册（runtime ctor 里挂 trackMotionStart）：同一次 motionStart
+  // 按注册序回调，缓动取节点值必须发生在 trackMotionStart 结算挂起动作之后——反序会让缓动目标钉在上一支
+  // 动作的 carry 残值上（收尾回补的 idle 被写成上一支的收尾姿态，模型从此冻住）
   // 首个 motionStart 跳过复位：入口参数已硬写干净态，无遗留可清
   // 后续动作照常开窗，清上一支动作的遗留开关；新动作驱动的参数豁免（引擎渐入自带混合，见 beginSmoothReset）
-  let firstMotion = true;
-  model.internalModel.motionManager.on("motionStart", (group, index) => {
-    const clip = ctx.runtime?.clipOf(group, index);
-    if (firstMotion) {
-      firstMotion = false;
-      return;
-    }
-    ctx.runtime?.beginSmoothReset(
-      clip
-        ? (ctx.fades?.transitions?.[clip] ?? ctx.fades?.default ?? undefined)
-        : undefined,
-      clip,
-    );
-  });
   // 常驻氛围层：effect 组（垂发/扶手布的微风摆动）在游戏内永远循环叠加，这里挂在 afterMotionUpdate（主动作求值后、saveParameters 前）直写参数，物理与姿态系统不触碰这些参数，故不会与本层互相覆盖。游戏内实测（zhenzhuhao_2）：effect 参数可与全部动作重叠（五体系列 MB_*×10 等），游戏表现是本层值赢——动作里同参数曲线是导出时烘焙的副本，被本层盖掉才是游戏内观感（挂 beforeMotionUpdate 让动作赢下共享参数，摆动会退化为动作副本的粗糙节奏）
   // effect 缺失/加载失败只跳过本层，不应中断整个挂载
   try {
@@ -132,11 +143,59 @@ async function mountModelInner(ctx, url) {
       mountState.currentIndex,
     );
   }
+  // 动作起播的复位登记（must 后于 runtime 的 trackMotionStart 注册，见上方序注释）
+  let firstMotion = true;
+  model.internalModel.motionManager.on("motionStart", (group, index) => {
+    const clip = ctx.runtime?.clipOf(group, index);
+    // 点消失类问题的自动取证：起播 3s 后若过半交互点出画，跑一次元凶扫描（逐参数写
+    // moc 默认看锚点是否归位，点名失控参数；单参全败再跑全量还原测试，切开"多参数耦合"
+    // 与"参数系外损坏"）。条件触发、每模型至多一次，常态静默；逐点状态与参数值榜的
+    // 常规读数在 HUD 交互点/状态组，console 不再定时倾倒
+    if (!ctx._anchorSwept) {
+      setTimeout(() => {
+        if (stale() || !ctx.runtime || ctx._anchorSwept) return;
+        const dots = ctx.hud.value?.dots ?? [];
+        const gone = dots.filter((d2) => /出画/.test(d2.status)).length;
+        if (!dots.length || gone <= dots.length / 2) return;
+        ctx._anchorSwept = true;
+        const { culprits, fixAll, probe } = anchorCulpritSweep(
+          ctx.model,
+          dots.find((d2) => d2.mx != null)?.name ?? "touch_drag1",
+        );
+        console.log(
+          "[l2d:culprit] 单参可归位 ×" +
+            culprits.length +
+            " | 全量还原:" +
+            (fixAll ? "锚点回位(多参数耦合错值)" : "仍不回位(参数系外损坏)") +
+            " | 读数核对:" +
+            JSON.stringify(probe) +
+            "\n" +
+            culprits
+              .map((c) => `  ${c.id} 当前${c.cur.toFixed(2)} → moc默认${c.def.toFixed(2)} 即归位`)
+              .join("\n"),
+        );
+      }, 3000);
+    }
+    if (firstMotion) {
+      firstMotion = false;
+      return;
+    }
+    ctx.runtime?.beginSmoothReset(
+      clip
+        ? (ctx.fades?.transitions?.[clip] ?? ctx.fades?.default ?? undefined)
+        : undefined,
+      clip,
+    );
+  });
   // 调色板控制层（色轴参数 skin 没有时整层旁路）
   installPalette(ctx, model);
   // 平滑复位每帧落笔：先于机器叠加层的 restoreLayer 注册（同事件按注册序触发）——机器加/乘参数的底值还原保持原语义，不被缓动写入覆盖
   model.internalModel.on("beforeMotionUpdate", () =>
     ctx.runtime.applySmoothReset(),
+  );
+  // 曲线落笔后即快照全参数（差分 mid 列的取数点）：须挂在 applyLayer 之前，快照才是"曲线刚落笔"的值
+  model.internalModel.on("afterMotionUpdate", () =>
+    snapshotAfterMotion(model),
   );
   // 拖拽参数机：数据与模型同目录（<id>.l2d.json，extract.js 烘焙产物）；播放回调解析 clip 名 -> 动作组（白名单里存的是 clip 名，如 touch_idle1、idle1），机器分区命中后由编排器接管路由
   const l2dConfig = await loadL2dConfig(url);
@@ -148,6 +207,8 @@ async function mountModelInner(ctx, url) {
   let entryIdle = null;
   // 入口硬切的缓存 motion 句柄，揭幕时恢复其表值转场时长（后续变体切换照常渐入）
   let entryMotion = null;
+  // 换入组已起播：揭幕不等复位缓动窗（change_in 起播即揭幕，用户看到动画全程）
+  let entryReveal = false;
   if (l2dConfig) {
     ctx.l2dOffset = l2dConfig.live2d_offset ?? null;
     ctx.mainuiShift = l2dConfig.mainui_shift ?? null;
@@ -174,7 +235,11 @@ async function mountModelInner(ctx, url) {
         group === ctx.runtime.idleGroup,
       ),
     );
-    manager.on("motionFinish", () => orch.noteMotionFinish());
+    manager.on("motionFinish", () => {
+      // 换出定格窗口（ctx._holdPose，playTransition 设置）：FinishAction 的 changeActionIdle
+      // 等价链停发——change_out 播完保持收尾姿态待销毁，不重播 idle 弹回原样
+      if (!ctx._holdPose) orch.noteMotionFinish();
+    });
     const core = model.internalModel.coreModel;
     model.internalModel.on("beforeMotionUpdate", () => orch.restoreLayer(core));
     model.internalModel.on("afterMotionUpdate", () => orch.applyLayer(core));
@@ -185,16 +250,25 @@ async function mountModelInner(ctx, url) {
     entryIdle = wantIdle;
     manager.stopAllMotions();
     ctx.runtime.resetParameters();
-    // auto idle 在 Live2DModel.from 时已创建同支 motion（渐入取 fades 表 0.5s），直接改写其渐入时长；尚未创建的由 createMotion 的一次性标记兜住
-    const idleGroup = ctx.runtime.idleGroup;
-    const defs = model.internalModel.settings?.motions?.[idleGroup] ?? [];
-    const idx = defs.findIndex((d) =>
-      (d.File ?? "").endsWith(`/${wantIdle}.motion3.json`),
-    );
-    entryMotion = manager.motionGroups?.[idleGroup]?.[idx];
-    if (entryMotion) entryMotion.setFadeInTime(0);
-    else ctx._entryHardCutClip = wantIdle;
-    ctx.actions.playLuaAction(wantIdle);
+    // 换入组起播：揭幕即 change_in（基底 idle 已被换出动画的定格收尾覆盖，这里不再先播 idle）
+    if (
+      pendingEntry &&
+      (model.internalModel.settings?.motions?.[pendingEntry]?.length ?? 0)
+    ) {
+      entryReveal = true;
+      ctx.actions.playMotion(pendingEntry);
+    } else {
+      // auto idle 在 Live2DModel.from 时已创建同支 motion（渐入取 fades 表 0.5s），直接改写其渐入时长；尚未创建的由 createMotion 的一次性标记兜住
+      const idleGroup = ctx.runtime.idleGroup;
+      const defs = model.internalModel.settings?.motions?.[idleGroup] ?? [];
+      const idx = defs.findIndex((d) =>
+        (d.File ?? "").endsWith(`/${wantIdle}.motion3.json`),
+      );
+      entryMotion = manager.motionGroups?.[idleGroup]?.[idx];
+      if (entryMotion) entryMotion.setFadeInTime(0);
+      else ctx._entryHardCutClip = wantIdle;
+      ctx.actions.playLuaAction(wantIdle);
+    }
   }
   ctx.camera.fitModel();
   // drawable 顶点在模型首次 update 时才由核心算出，上面的适配只能拿到陈旧值；两帧后（顶点就绪、idle 已应用）按真实场景重新适配一次
@@ -221,7 +295,9 @@ async function mountModelInner(ctx, url) {
           discard();
           return;
         }
-        const pending = ctx.runtime?.resetPending;
+        // 换入组起播的揭幕不等复位缓动窗：change_in 的渐入与复位同窗，等窗闭合会让
+        // 用户看到的是 change_in 播完后的姿态而非动画全程
+        const pending = entryReveal ? false : ctx.runtime?.resetPending;
         if (pending && performance.now() - revealStart < 3000) {
           requestAnimationFrame(reveal);
           return;

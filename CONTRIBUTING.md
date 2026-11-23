@@ -49,6 +49,7 @@ node scripts/tests/run_all.mjs interaction  # 只运行文件名含指定字符�
 - 常用 type：`feat`（新功能）、`fix`（修复）、`refactor`（重构）、`docs`（文档）、`test`（测试）、`chore`（杂项）。
 - scope 可选，填改动所在的模块，如 `feat: add triggle for ring after married` 中的 ring 层语义。
 - subject 用一句短句写清改动内容，中英文均可，不句号结尾。
+- 消息最后一行写样例标注 `- Use example (<Skin>)`（`models/` 下的皮肤目录名），声明本次主要工作以哪个皮肤为准测试。示例：`- Use example (zhenzhuhao_2)`。一次提交覆盖多皮肤时取主要工作所依赖的那一只；没跑皮肤样例的提交（未实机验证的功能、纯文档、构建工具链等）不写该行——有标注即代表已按该皮肤验证过，review 时按标注直接加载对应皮肤对照行为。
 
 ### Pull Request
 

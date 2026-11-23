@@ -305,7 +305,7 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
             权重{{ hud.motionDiff.weight.toFixed(2) }}
           </span>
           <span v-for="r in hud.motionDiff.rows" :key="r.id" class="debug-pair">
-            {{ r.id }} {{ r.want.toFixed(1) }}→{{ r.got.toFixed(1) }}
+            {{ r.id }} {{ r.want.toFixed(1) }}→{{ r.mid == null ? "?" : r.mid.toFixed(1) }}→{{ r.got.toFixed(1) }}
           </span>
           <span v-if="!hud.motionDiff.count" class="debug-pair dim">全部吻合</span>
         </div>
@@ -513,6 +513,8 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
 /* 面板叠放容器：调试面板 + 注入面板共用锚点，纵向排列互不遮挡 */
 .debug-stack {
   position: absolute;
+  /* 层级压过 FormToggle(z:5)：面板展开时盖住右上角胶囊 */
+  z-index: 6;
   /* 右缘 40px：避开状态触发收起后探进屏幕 32px 的圆钮把手 */
   right: 40px;
   bottom: 44px;
@@ -526,6 +528,20 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
   align-items: stretch;
   gap: 6px;
   pointer-events: none;
+}
+
+.debug-stack::-webkit-scrollbar {
+  width: 6px;
+}
+
+.debug-stack::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.debug-stack::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(159, 217, 189, 0.35);
 }
 
 .debug-stack>.debug-panel {
@@ -546,12 +562,15 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
   font: 500 11px/1.6 ui-monospace, monospace;
   user-select: none;
   pointer-events: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(159, 217, 189, 0.35) transparent;
 }
 
 .debug-panel::-webkit-scrollbar {
   width: 6px;
+}
+
+.debug-panel::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .debug-panel::-webkit-scrollbar-thumb {
@@ -778,6 +797,32 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
   max-height: 420px;
   overflow-y: auto;
   pointer-events: auto;
+}
+
+.param-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.param-list::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.param-list::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(159, 217, 189, 0.35);
+}
+
+/* Firefox 不认 webkit 伪元素，标准属性收在这里；不能与伪元素同写——
+   Chromium 121+ 只要 scrollbar-width/color 非 auto 就整个忽略 ::-webkit-scrollbar，
+   回落成系统 Fluent 悬浮滑块（浮在面板边缘上的"悬空"一条） */
+@supports not selector(::-webkit-scrollbar) {
+  .debug-stack,
+  .debug-panel,
+  .param-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(159, 217, 189, 0.35) rgba(255, 255, 255, 0.06);
+  }
 }
 
 /* 分组标题行高亮：组名 ×数量一眼可辨，隔开上下两组网格 */

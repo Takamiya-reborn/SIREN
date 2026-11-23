@@ -10,7 +10,7 @@
 | 动作播放、挂载、交互、物理、视线等运行时行为 | [runtime.md](runtime.md) |
 | 已知根因对照（现象 → 机制） | [traps.md](traps.md) |
 | 测试命令、布局与编写要求 | [testing.md](testing.md) |
-| 代码风格、资产边界等项目约定 | [conventions.md](conventions.md) |
+| 代码风格、资产边界、提交消息（CM）等项目约定 | [conventions.md](conventions.md) |
 
 锚点约定：各文档以「文件 + 函数符号」定位实现（不用行号，行号随提交漂移），grep 函数名即达；改代码时同步更新锚点。
 

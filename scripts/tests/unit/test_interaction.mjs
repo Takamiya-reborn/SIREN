@@ -26,7 +26,7 @@ const clips = {
   // 收尾分支：带回 0
   touch_idle3: { state: { caidan: [1, 0] }, carry: { All_X: [2.34, 0] } },
   // idle 变体：姿态预设跨循环持续
-  idle1: { carry: { All_X: [0, 1] } },
+  idle1: { carry: { All_X: [0, 1], bu9: [1, 1] } },
   // 纯事件 clip（无 state/carry）
   touch_body: {},
   // moc 默认即满足的前置（glove 默认 1，fulici_2 Rmoxb 手感同款）：touch_head 要求持有，touch_head2 消耗（1→0），touch_head3 产出（0→1）
@@ -39,10 +39,13 @@ const clips = {
   // 自指门控（wuzang_3 touch_special 同款）：以 qiu=1 起播、自身又是唯一 end=1 的动作——qiu 是连续量参数（moc 默认 0.7，氛围球），t0 打满亮只是硬设。
   // 前置不可产出（自要求自供给）→ 豁免门控，分支必须可达
   touch_special: { state: { qiu: [1, 1] } },
+  // 布局选择器（suweiaitongmeng_3 Param9 同款）：反应钉 15、idle1 曲线钉 1，idle0 不驱动（其布局 = moc 默认 0）
+  touch_drag7: { carry: { bu9: [15, 15] } },
 };
 const motions = {
   idle: [{ File: "m/idle.motion3.json" }, { File: "m/idle1.motion3.json" }],
   touch_idle1: [{ File: "m/touch_idle1.motion3.json" }],
+  touch_drag7: [{ File: "m/touch_drag7.motion3.json" }],
   touch_idle3: [{ File: "m/touch_idle3.motion3.json" }],
   touch_idle: [
     { File: "m/touch_idle1.motion3.json" },
@@ -70,6 +73,7 @@ const fixture = () => {
     {
       caidan: { default: 0, min: 0, max: 1 },
       All_X: { default: 0, min: -10, max: 10 },
+      bu9: { default: 0, min: -5, max: 15 },
       sdrtx: { default: 0, min: 0, max: 1 },
       qiu: { default: 0.7, min: 0, max: 1 },
       eye: { default: 1, min: 0, max: 1 },
@@ -154,6 +158,29 @@ const fixture = () => {
     "idle 变体起播立即落账（All_X=1）",
     runtime.node.get("All_X") === 1 && runtime.pendingIdle === true,
   );
+}
+
+// --- 2.5) idle 家族布局参数：反应钉的布局值在回不驱动它的 idle 变体时按 moc 默认归位 ---
+// suweiaitongmeng_3 Param9 实况复刻：反应（钉 15）结束回 idle0（不驱动 → 布局=默认 0），
+// 无归位则节点被表外补账毒化、复位缓动把触点标记永久钉在反应布局（屏外，命中 0 个）
+{
+  const { runtime } = fixture();
+  // 驱动集缓存（loadMotionDriven 预热产物）：idle0 不驱动 bu9，idle1 曲线钉 1
+  runtime._drivenSet = new Map([
+    ["idle", new Set()],
+    ["idle1", new Set(["bu9"])],
+  ]);
+  runtime.trackMotionStart("touch_drag7", 0);
+  runtime.trackMotionFinish();
+  check("反应落账布局值（bu9=15）", runtime.node.get("bu9") === 15);
+  runtime.trackMotionStart("idle", 0);
+  check(
+    "回不驱动布局的 idle0 → 家族参数按 moc 默认归位（bu9=0）",
+    runtime.node.get("bu9") === 0,
+  );
+  runtime.trackMotionFinish();
+  runtime.trackMotionStart("idle", 1);
+  check("回 idle1 → 布局由其曲线落账（bu9=1）", runtime.node.get("bu9") === 1);
 }
 
 // --- 3) canPlay 门控（查节点而非实时参数）---

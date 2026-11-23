@@ -65,7 +65,7 @@ function ensureMotionJson(ctx, clip) {
  * 与 doUpdateMotion 同钟即 model.elapsedTime），混合权重直读 _stateWeight。
  * @returns {{clip, t, duration, weight, rows, count} | null}
  */
-function motionDiffReadout(ctx) {
+export function motionDiffReadout(ctx) {
   const orch = ctx.orch;
   const clip = orch?.playingClip;
   if (!clip || !ctx.model) return null;
@@ -156,6 +156,8 @@ export function createTickerCallback(ctx) {
     ctx.orch?.step(ctx.app.ticker.deltaMS / 1000);
     const live = ctx.hintsCtl.update();
     const rt = ctx.runtime;
+    // 调色板读数一次采齐（read 对已换挂/销毁的旧模型返回 null）
+    const paletteRead = ctx.palette?.read();
     // 动作差分采样挂 beforeModelUpdate 事件（低频 0.12s 窗）：该事件在主动作/视线/物理/机器各层落笔之后、
     // 内核 update() 之前触发——update 返回后 save/load 已把参数还原成动作基值，事后读数看不到叠加层
     // 差分采样钩子挂在 Live2D 的 internalModel 上；spine 皮肤（Ani 类）无该层，整段跳过
@@ -219,9 +221,9 @@ export function createTickerCallback(ctx) {
           }
         : null,
       // 调色板：面板开合（BANZI）+ 色轴实时值 + 循环/复位回调（HudPanel 点击用）
-      palette: ctx.palette
+      palette: paletteRead
         ? {
-            ...ctx.palette.read(),
+            ...paletteRead,
             cycle: (id) => ctx.palette.cycle(id),
             reset: () => ctx.palette.reset(),
           }

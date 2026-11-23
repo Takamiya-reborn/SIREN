@@ -1,4 +1,4 @@
-/** 动作播放 API：状态触发面板入口（playMotion）、拖拽参数机的播放回调（playLuaAction）、命中分区处理（handleHitAreas）与重置入口（resetInteraction）。读取 ctx.model / ctx.orch / ctx.runtime / ctx.lastGesture（gestures.js 写入）。 */
+/** 动作播放 API：状态触发面板入口（playMotion）、拖拽参数机的播放回调（playLuaAction）、命中分区处理（handleHitAreas）、重置入口（resetInteraction）与形态切换过渡（playTransition）。读取 ctx.model / ctx.orch / ctx.runtime / ctx.lastGesture（gestures.js 写入）。 */
 import { MotionPriority } from "pixi-live2d-display/cubism4";
 
 /**
@@ -145,7 +145,20 @@ export function createActions(ctx) {
     }
     ctx.currentMotion.value = group;
     // 等引擎的真实结果：MotionState.reserve 拒绝（重播在循环的同支 idle、预留被抢等）只静默回 false——调用方（onActionApply）必须拿到 false 才不会把 activeData（idle 变体号/白名单）记到一次没播出去的动作上
-    const ok = await ctx.model.motion(group, index, MotionPriority.FORCE);
+    // 加载段异常（motion3 fetch 失败等）会以 rejection 形态冒出：不接住则 reserve 已占、
+    // 链路静默断裂（noteMotionFinish 的收尾回播是无人处理的 async），后续 idle 永久拒播
+    let ok = true;
+    try {
+      ok = await ctx.model.motion(group, index, MotionPriority.FORCE);
+    } catch (err) {
+      console.warn(
+        "[l2d] 动作播放异常:",
+        `${group}[${index}]`,
+        err?.message ?? err,
+      );
+      ctx.orch?.debug?.(`${clipName} 播放异常(${group}[${index}])`);
+      ok = false;
+    }
     if (!ok) {
       console.warn("[l2d] 动作播放被引擎拒绝:", `${group}[${index}]`);
       // 拒绝原因进触发链日志：链式路由中一环播放失败、activeData 不入账时整条链静默断掉，无此日志无法定位断点
@@ -170,11 +183,66 @@ export function createActions(ctx) {
     if (played) ctx.currentMotion.value = played.group;
   }
 
+  /**
+   * 形态切换过渡：FORCE 播放单发动作组并等它播完（change_out 用）。
+   * startMotion 在起播时就 resolve（pixi-live2d-display 语义），完成等待挂
+   * motionFinish 一次性事件。播完定格在收尾姿态：motionFinish 与 idle 自动回播在
+   * 引擎同一帧 update 里（事后摘不掉），须在起播前摘掉 idle 组自启；本 API 只服务
+   * 形态切换，旧模型随后换挂销毁，不恢复 idle 组。
+   * @returns {Promise<boolean>} false = 没播成（spine 侧/组缺失/被白名单拦/引擎拒绝），调用方直接换挂载
+   */
+  async function playTransition(group) {
+    const model = ctx.model;
+    const orch = ctx.orch;
+    // spine 侧交互全旁路（ctx.runtime 为 null），此 API 仅 L2D 有效
+    if (!model || (!ctx.runtime && !orch)) return false;
+    if (orch && !orch.checkEnablePlay(group)) return false;
+    const defs = model.internalModel.settings?.motions?.[group] ?? [];
+    if (!defs.length) return false;
+    const mgr = model.internalModel.motionManager;
+    const prevIdleGroup = mgr.groups.idle;
+    mgr.groups.idle = null;
+    // 换出定格窗口：编排器的 FinishAction→changeActionIdle 等价链（noteMotionFinish 显式
+    // 重播 idle）随之停发，change_out 播完保持收尾姿态；保持到旧模型换挂销毁，新挂载头清标
+    ctx._holdPose = true;
+    let onFinish = null;
+    // 播完即续（motionFinish）；15s 超时兜底循环误判/事件丢失，两路都先摘监听再 resolve
+    const done = new Promise((resolve) => {
+      const timeout = setTimeout(() => finish(), 15_000);
+      onFinish = () => finish();
+      const finish = () => {
+        clearTimeout(timeout);
+        mgr.off("motionFinish", onFinish);
+        resolve(true);
+      };
+      mgr.on("motionFinish", onFinish);
+    });
+    let started = true;
+    try {
+      started = await model.motion(
+        group,
+        idleGroupIndex(group),
+        MotionPriority.FORCE,
+      );
+    } catch {
+      started = false;
+    }
+    if (!started) {
+      mgr.off("motionFinish", onFinish);
+      mgr.groups.idle = prevIdleGroup;
+      ctx._holdPose = null;
+      return false;
+    }
+    await done;
+    return true;
+  }
+
   return {
     playMotion,
     idleGroupIndex,
     resetInteraction,
     playLuaAction,
     handleHitAreas,
+    playTransition,
   };
 }

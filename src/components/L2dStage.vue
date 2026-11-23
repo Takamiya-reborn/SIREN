@@ -206,8 +206,21 @@ onBeforeUnmount(() => {
 
 watch(() => props.modelUrl, (url) => url && mountModel(ctx, url))
 
-/** 供外部（状态触发面板）直接播放指定动作组；spine 皮肤无动作组，group 即骨架变体名，走变体切换 */
-defineExpose({ play: (group) => (ctx._spinePlay ? ctx._spinePlay(group) : ctx.actions.playMotion(group)) })
+/** 供外部（状态触发面板）直接播放指定动作组；spine 侧走 _spineTrigger 分派
+ * （变体名重挂切换、动画名就地单发播完回落 starting 循环）。
+ * playAndWait 等过渡动画播完再续（形态切换）：spine 侧走 _spineTransition（change_out 单发），
+ * L2D 侧走 actions.playTransition；两侧组名缺失都返回 false（调用方退化直切）。
+ * setEntryGroup 登记换入组（change_in/login）：下一次挂载消费，揭幕瞬间起播换入动画。 */
+defineExpose({
+  play: (group) => (ctx._spineTrigger ? ctx._spineTrigger(group) : ctx.actions.playMotion(group)),
+  playAndWait: (group) =>
+    ctx.model?.state && ctx._spineTransition
+      ? ctx._spineTransition(group)
+      : ctx.actions.playTransition(group),
+  setEntryGroup: (group) => {
+    ctx._entryGroup = group ?? null
+  },
+})
 </script>
 
 <template>

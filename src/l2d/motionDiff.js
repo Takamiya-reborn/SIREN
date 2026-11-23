@@ -78,13 +78,31 @@ export function sampleMotionCurves(curves, t) {
   return out;
 }
 
+// afterMotionUpdate 时点的全参数快照（曲线刚落笔、物理/机器未跑），diffMotion 的 mid 列取自此
+const midSnapshot = new Map();
+
+/** 曲线落笔后立即快照全参数（挂 afterMotionUpdate，mount.js 注册）。 */
+export function snapshotAfterMotion(model) {
+  const core = model.internalModel.coreModel;
+  const n = core.getParameterCount();
+  // 参数 id 表：核心包装层没有按序号取 id 的 API，走 raw model 的 parameters.ids
+  const raw = core.getModel?.() ?? core;
+  const ids = raw.parameters.ids;
+  midSnapshot.clear();
+  for (let i = 0; i < n; i++) {
+    midSnapshot.set(ids[i], core.getParameterValueByIndex(i));
+  }
+}
+
 /**
  * 组装当前动作的差分行（hud.js 每帧调用）。
  * @param model pixi-live2d-display 的 Live2DModel
  * @param motionJson 在播动作的 motion3 JSON（缓存层负责取回）
  * @param t 循环本地时间（秒）
  * @param tolDev 参数差分阈值（模型参数量程 ±30 级别，1 以内视为混合/舍入噪声）
- * @returns {{rows: Array, count: number}} rows 按 |差| 降序截断，count 为全量差条数
+ * @returns {{rows: Array, count: number}} rows 按 |差| 降序截断，count 为全量差条数；
+ *   rows[].mid = afterMotionUpdate 时点的快照值（曲线刚落笔、物理/机器未跑），
+ *   配合 got（beforeModelUpdate 实值）区分"曲线没写"与"写了被后置层盖掉"
  */
 export function diffMotion(model, motionJson, t, tolDev = 1) {
   const core = model.internalModel.coreModel;
@@ -96,6 +114,7 @@ export function diffMotion(model, motionJson, t, tolDev = 1) {
   for (const [id, e] of expected) {
     let got;
     const want = e.v;
+    const mid = midSnapshot.get(id);
     if (e.target === "PartOpacity") {
       got = core.getPartOpacityById(id);
     } else {
@@ -108,7 +127,7 @@ export function diffMotion(model, motionJson, t, tolDev = 1) {
     if (got == null) continue;
     const d = got - want;
     if (Math.abs(d) <= (e.target === "PartOpacity" ? 0.02 : tolDev)) continue;
-    rows.push({ id, target: e.target, want, got, d });
+    rows.push({ id, target: e.target, want, mid, got, d });
   }
   rows.sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
   return { rows, count: rows.length };

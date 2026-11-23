@@ -47,10 +47,15 @@ export function installPalette(ctx, model) {
     return;
   }
 
+  // 判活：换挂到 spine（或模型销毁）后旧调色板的 coreModel 已废，HUD 的 ticker
+  // 每帧仍调 read——不按当前模型判活会读已销毁核心抛 TypeError 杀掉整帧渲染
+  const alive = () => ctx.model === model && !model.destroyed;
+
   ctx.palette = {
     values,
-    /** HUD 读数：面板开合 + 各轴当前值（Core 侧实时值） */
+    /** HUD 读数：面板开合 + 各轴当前值（Core 侧实时值）；调色板失活返回 null（HUD 按无调色板渲染） */
     read() {
+      if (!alive()) return null;
       return {
         open: panelIdx >= 0 && core.getParameterValueByIndex(panelIdx) > 0.5,
         axes: axes.map(([id, i]) => [id, core.getParameterValueByIndex(i)]),
@@ -58,6 +63,7 @@ export function installPalette(ctx, model) {
     },
     /** HUD 点击循环一档：0 → max(1) → min(-1) → 0（对应游戏里双向色轴的三态） */
     cycle(id) {
+      if (!alive()) return;
       const axis = axes.find(([aid]) => aid === id);
       if (!axis) return;
       const [, i, max, min] = axis;
@@ -67,6 +73,7 @@ export function installPalette(ctx, model) {
       core.setParameterValueByIndex(i, values[id]);
     },
     reset() {
+      if (!alive()) return;
       for (const [id, i] of axes) {
         values[id] = 0;
         core.setParameterValueByIndex(i, 0);

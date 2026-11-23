@@ -166,6 +166,8 @@ Unity/Cubism 模型
 
 动作不存在、动作被名单拒绝或播放器拒绝时，普通 `activeData` 不落账。`PLAY` 通知发生在 `applyActiveData` 之前，因此监听器可以在动作成功后修改其他机器的目标值或 idle 分支。
 
+机器层 `onEventCallback(EVENT, payload, callback)` 打包的回调，控制层一律以固定 nil 调用（EVENT_ACTION_APPLY 控制层分支尾部，携带回调实参的局部变量从未被赋值）。因此原文所有 `function (slot0) if slot0 then … end` 形态包裹的回调副作用——type 16 清终局结果、type 3 收尾清单触发标记等——在游戏本体从未执行过。读 Lua 遇到同款「callback + if-guard」结构时按"永不执行"理解；type 16 的防重发实际由重复 idle 豁免兜住，不依赖清账。
+
 ## 7. DragMachine 参数机
 
 ### 7.1 参数值和目标值
@@ -178,6 +180,14 @@ Unity/Cubism 模型
 4. 最后钳制到 `range`。
 
 模型中不存在对应参数时，机器仍然维护内部值和动作状态，但不写 Cubism 参数。
+
+目标值有三种落账时序：
+
+1. `setTargetValue`：立刻开始平滑逼近，是常态路径；
+2. `prepareTargetValue`：暂存目标，等当前动作播完（且 `change_focus` 为假）才落账，联动层 `change_focus = false` 时使用；
+3. `setTargetValueDelay(value, delay)`：目标**立即**落账，但参数平滑被 `delayTargetTime` 冻结指定秒数，到点才开始逼近（`updateParameterValue` 首段倒计时后整段 early-return）。
+
+延迟落账不改变目标值本身，所以按目标值（而非当前值）做的判定立刻能看到这颗子——平滑冻结只影响画面逼近速度，不影响逻辑可见性。移植端尚未实现该状态。
 
 ### 7.2 mode 和参数图层
 
