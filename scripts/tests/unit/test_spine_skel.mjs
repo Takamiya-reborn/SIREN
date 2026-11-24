@@ -31,7 +31,7 @@ str('root'); f32(0); f32(0); f32(0); f32(1); f32(1); f32(0); f32(0); f32(0); u8(
 str('body'); varint(0); f32(90); f32(10.5); f32(-3.25); f32(1); f32(2); f32(0.5); f32(0); f32(12); varint(1); u8(1)
 
 varint(1) // 槽位
-str('slot_a'); varint(1); i32(-1); i32(-1); varint(0); varint(0) // rgba/rgba2=-1 无两色，attachment=null，blend=normal
+str('slot_a'); varint(1); i32(-1); i32(0x503041); varint(0); varint(0) // rgba=-1，rgba2=两色暗色 RGB888，attachment=null，blend=normal
 
 varint(0) // ik
 varint(0) // transform
@@ -53,10 +53,14 @@ varint(0) // events
 varint(1) // 动画数
 str('normal')
 varint(1) // 槽位时间轴数
-varint(0); varint(1) // slot 0，1 条
+varint(0); varint(2) // slot 0，2 条
 u8(0); varint(2) // attachment 时间轴，2 帧
 f32(0); varint(0) // t=0，name=null（清空）
 f32(0.5); varint(1) // t=0.5，name=strings[0]
+u8(2); varint(2) // twoColor 时间轴，2 帧
+f32(0); i32(0xff8040ff | 0); i32(0x302040 | 0) // t=0，light RGBA，dark RGB888
+u8(0) // 帧间曲线：linear
+f32(1); i32(0x204080ff | 0); i32(0 | 0) // t=1
 varint(1) // 骨骼时间轴数
 varint(1); varint(1) // bone 1，1 条
 u8(0); varint(2) // rotate，2 帧
@@ -91,6 +95,7 @@ eq('body skinRequired', body.skinRequired, true)
 eq('槽数', skel.slots.length, 1)
 eq('槽位归属', skel.slots[0].bone, 'body')
 eq('槽位 rgba（-1 白）', skel.slots[0].rgba, -1)
+eq('槽位两色暗色 RGB888', skel.slots[0].rgba2, 0x503041)
 eq('槽位 attachment', skel.slots[0].attachment, null)
 
 eq('skin 数', skel.skins.length, 1)
@@ -128,6 +133,15 @@ check('rotate JSON 曲线键位', rot[0].curve === rot[0].curve && Math.abs(rot[
     && Math.abs(rot[0].c2 - 0.66) < 1e-6 && Math.abs(rot[0].c3 - 0.99) < 1e-6 && Math.abs(rot[0].c4 - 1) < 1e-6,
     JSON.stringify({ curve: rot[0].curve, c2: rot[0].c2, c3: rot[0].c3, c4: rot[0].c4 }))
 eq('attachment JSON 帧', json.animations.normal.slots.slot_a.attachment.map((f) => f.name), [null, 'tex_page'])
+// 槽位两色暗色落 "#rrggbb"（RGB888 整数）；缺 dark 键时 pixi-spine 的 Slot.darkColor 为 null，
+// twoColor 时间轴的逐帧写入会落到 null 上
+eq('槽位 dark 键', json.slots[0].dark, '#503041')
+eq('twoColor 帧 light/dark',
+    JSON.stringify(json.animations.normal.slots.slot_a.twoColor),
+    JSON.stringify([
+        { time: 0, light: 'ff8040ff', dark: '302040' },
+        { time: 1, light: '204080ff', dark: '000000' },
+    ]))
 
 // ---- 第二条流：加权 mesh + clipping 附件（回归：weightedFlat 序号错位曾让顶点读到越界 undefined） ----
 const bytes2 = []
@@ -316,5 +330,7 @@ check('单候选旧名按公共前缀修补', json3.animations.normal.deform?.['
     JSON.stringify(json3.animations.normal.deform?.['1']))
 check('多候选无前缀旧名丢弃', json3.animations.normal.deform?.['1']?.slot_b === undefined,
     JSON.stringify(json3.animations.normal.deform?.['1']?.slot_b))
+
+check('无两色槽位省略 dark 键', 'dark' in json2.slots[0] === false && 'dark' in json3.slots[0] === false)
 
 finish()

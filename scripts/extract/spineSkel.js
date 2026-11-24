@@ -499,7 +499,9 @@ export function toSpine38Json(parsed) {
             const [r, g, b, a] = rgbaHex(s.rgba)
             const slot = { name: s.name, bone: s.bone, color: `${hex2(r)}${hex2(g)}${hex2(b)}${hex2(a)}` }
             if (s.attachment) slot.attachment = repairName(slotIndex, s.attachment)
-            if (s.blend) slot.blend = BLEND_MODES[s.blend] ?? 'normal'
+            // dark：槽位两色暗色，二进制里是 RGB888 整数（-1 哨兵 = 无两色，省略键）；
+            // pixi-spine 只在 slot data 带 dark 时创建 Slot.darkColor，twoColor 时间轴直接落其上
+            if (s.rgba2 !== -1) slot.dark = rgbHex(s.rgba2)
             return slot
         }),
     }
@@ -803,4 +805,8 @@ function colorArray(r, g, b, a) {
 function rgbaHex2(v) {
     const r = (v >>> 16) & 0xff, g = (v >>> 8) & 0xff, b = v & 0xff
     return [0, r / 255, g / 255, b / 255]
+}
+// RGB888 整数 -> "#rrggbb"（3.8 JSON 槽位 dark 的落笔形态）
+function rgbHex(v) {
+    return `#${((v >>> 16) & 0xff).toString(16).padStart(2, '0')}${((v >>> 8) & 0xff).toString(16).padStart(2, '0')}${(v & 0xff).toString(16).padStart(2, '0')}`
 }
