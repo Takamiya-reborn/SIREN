@@ -180,6 +180,9 @@ export function buildCatalog(
     }
     if (isSpine) entry.ani = true;
     if (!bundleSet.has(painting)) entry.l2d = false;
+    // 换装形态开关配置按 painting 归档（双形态条目两侧各有 direction 序，合并时并入映射）
+    if (template?.change_skin)
+      entry.changeSkins = { [entry.painting.toLowerCase()]: template.change_skin };
     if (entry.ship_group === undefined) delete entry.ship_group;
     if (shipGroup !== undefined && camps.has(shipGroup))
       entry.camp = camps.get(shipGroup);
@@ -192,6 +195,8 @@ export function buildCatalog(
       const l2dExists = (existing.l2d ?? true) || (entry.l2d ?? true);
       if (l2dExists) delete existing.l2d;
       else existing.l2d = false;
+      if (entry.changeSkins)
+        existing.changeSkins = { ...entry.changeSkins, ...existing.changeSkins };
       existing.altPaintings ??= [];
       existing.altPaintings.push(entry.painting);
     } else {

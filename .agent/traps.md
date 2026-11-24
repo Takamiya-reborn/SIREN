@@ -41,3 +41,8 @@
 - spine 皮肤身体不可见 → 骨架多套皮肤且 initialSkin 为空，人物部件普遍不在 default 皮肤，挂载层须回落 skins[1]（spineMount.js `applySkin()`）。
 - 3.8 JSON 读取器整体抛错而游戏正常 → 美术迭代旧附件名悬挂引用：setup 名与动画引用经同槽位最长公共前缀修补、仍落空的 deform 条目丢弃（spineSkel.js `repairName()`；游戏读取器静默跳过，pixi-spine 严格解析不跳）。
 - 会话中途页面报 deps 文件不存在 → @pixi-spine/all-3.8 是 CJS 且 import 有模块级副作用，冷发现式预构建中途重跑使旧 ？v= 哈希失效；optimizeDeps.include 随启动预构建规避（vite.config.js）。
+- twoColor 时间轴逐帧 `null.set` 崩 → 槽位 JSON 缺 `dark` 键（pixi-spine 的 Slot.darkColor 可空，spine-unity C# 非空结构体无此分歧）；转换器侧修复见 spine.md 转换方言。
+- spine 事件监听永远不触发、静默退化兜底无报错 → pixi-spine 的 AnimationStateListener `event` 回调是 `(entry, event)` 双参（runtime `entry.listener.event(entry, event_3)`），单参实现会把 TrackEntry 当事件对象取不得名；complete/end 是单参无此坑。
+- 换挂/卸载后整帧渲染崩死（卡帧循环）→ SpineBase.destroy 走到最后才把自己摘离父节点，销毁中途抛错会把半销毁对象滞留渲染树被 ticker 逐帧渲染（`transform` 已置 null）；且 `app.destroy(true)` 内部 `stage.destroy` 还会再清一遍子树。纪律：所有销毁点**先摘离再 destroy + try 包裹**，卸载钩子保证 `app.destroy` 恒被执行（L2dStage.vue `onBeforeUnmount`、spineMount.js 换挂段、mount.js `reveal()`）。
+- 转场/atlas 加载抛 "frame does not fit inside the base Texture" → atlas 文本声明尺寸与实际贴图尺寸不一致（美术 2x 导出）；spine-unity 归一化 UV 无碍、pixi-spine 像素框裁剪即崩，烘焙缩写修复见 spine.md 烘焙（`scaleAtlasPages()`）。
+- 换挂瞬间转场可见顿帧 → 两笔主线程开销砸在换挂帧：旧模型 GPU 销毁（几十 ms，先摘离后销毁、destroy 推迟一帧）+ 覆盖层预热回填重解析（~300ms，切换进行中不预热、切完回填）；预热缓存见 changeskin.md。

@@ -6,18 +6,17 @@
 - 消息最后一行写样例标注 `- Use example (<Skin>)`，声明本次主要工作以哪个皮肤为准测试：`<Skin>` 填 models/ 下皮肤目录名（如 suweiaitongmeng_3）；一次提交覆盖多皮肤时取主要工作所依赖的那一只，不逐个罗列。
 - 没跑皮肤样例的提交（未实机验证的功能、纯文档、构建工具链等）不写该行——有标注即代表已按该皮肤验证过。
 - 目的：review 时按标注直接加载对应皮肤对照行为，不用从 diff 猜验证对象。
-- 范例（实际提交 c3d8f51；首段可不写根因，要点逐条列工作项，样例行收尾）：
+- 范例（首段可不写根因，要点逐条列工作项，每一项要简洁，收敛在git默认要求的宽度，尽可能保持单行，样例行收尾）：
 
   ```text
-  feat: implement skin minigames (type 13 follow wheel, type 15/16 tic-tac-toe)
+  fix: emit slot dark color in baked spine JSON to fix twoColor crash
 
-  - type 13: external param diff x rate steps the target, num-neighborhood
-    latch fires action, frozen while a motion plays
-  - type 15/16: tic-tac-toe on cell machines, AI move with easing freeze,
-    delayed result write, win/lose result machines
-  - HUD panels for both; unit tests green; semantics in .agent/minigames.md
-
-  - Use example (suweiaitongmeng_3)
+  - spineSkel dropped slot "dark" (two-color dark, RGB888 int, -1 sentinel)
+  - pixi-spine leaves Slot.darkColor null without it; twoColor timelines
+    crash on null.set every frame (game C# darkColor is non-nullable)
+  - jianwu_3 is the only twoColor user (login/touch_special); re-baked
+  - test: dark emission, twoColor frame keys, omission without dark color
+  - Use example (jianwu_3)
   ```
 
 ## 代码风格

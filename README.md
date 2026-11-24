@@ -64,6 +64,7 @@ _SIREN_ 全称 _SIREN Is Redressing the Entire Navy_ 。还在因为电脑上需
 - `idle` 动作支持先切换变体再播放，适用于用背景网格切换待机摆位的皮肤；被新动作顶掉的旧反应不会遗留“播放中”状态。
 - `src/l2d/` 负责舞台、镜头、动作与手势装配，`src/utils/` 负责交互状态机、拖拽参数机和氛围动画；详细还原规则以 [unpack.md](docs/unpack.md) 为准。
 - ani（spine）皮肤走独立挂载链（pixi-spine 3.8），贴图按预乘 alpha（PMA）语义渲染；提取与烘焙见 [unpack.md](docs/unpack.md) 3.4 节。
+- 双形态皮肤（L2D 与 ani 并存）提供形态开关：切换动画由独立的 changeskin 转场覆盖层播放（事件驱动换挂与换入时机），实现细节与已知限制见 [unpack.md](docs/unpack.md) 3.5 节。
 - 未烘焙 `l2d.json` 的皮肤仍可加载，但会跳过参数机层，退回基础交互路径。
 
 ## 项目结构
@@ -72,7 +73,7 @@ _SIREN_ 全称 _SIREN Is Redressing the Entire Navy_ 。还在因为电脑上需
 scripts/              # 提取脚本：update.js（目录一键更新）、pull_bundles.js（资源拉取）、pull_lua.js（Lua 快照拉取）、extract.js + extract/（解包重组并烘焙交互配置与 fades.json）、gen_catalog.js（皮肤目录生成）；pull_cs.js / disasm.js 为逆向期 C# 语义核对（使用流程不需要）
 tools/adb/            # Android 平台工具（Apache 2.0，NOTICE 随目录分发）
 tools/Il2CppDumper/   # 游戏 C# 程序集 dump 工具（MIT，逆向期参考，仅保留 x64 主程序与 config.json）
-models/               # 导出的标准 Cubism 模型（moc3 v4/v5），按 <角色>/<皮肤id> 两级目录组织（不入库）
+models/               # 导出的标准 Cubism 模型（moc3 v4/v5），按 <角色>/<皮肤id> 两级目录组织（不入库）；changeskin/ 顶级目录例外，存放双形态换装转场覆盖层（跨皮肤共享，不入侧栏）
 src/                  # Vue 前端（图鉴 + L2D 舞台 + 交互层）
 ├── components/       # UI：L2dStage（瘦壳）+ tabs/ 侧栏 + debug/HudPanel（HUD 面板）
 ├── l2d/              # 舞台核心（普通模块 + ctx 对象，不依赖 vue）：motionPatches（动作库补丁）、motionDiff（动作曲线差分）、paramOverride（HUD 参数注入）、camera（取景与拖拽标定）、mount（模型挂载装配）、actions（播放 API）、gestures（指针手势）、hud（每帧读数）

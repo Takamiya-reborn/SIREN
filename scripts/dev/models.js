@@ -62,11 +62,13 @@ export function compareSkinNames(a, b) {
  * 显示名缺失回退目录名。新增皮肤把目录丢进 models/ 刷新页面即生效。
  */
 export function scanModels(modelsDir = resolve(ROOT, "models")) {
+  // changeskin/ 是换装转场覆盖层目录（change_skin.action 烘焙产物，跨皮肤共享），非皮肤
+  const RESERVED_DIRS = new Set(["changeskin"]);
   const models = [];
   for (const char of existsSync(modelsDir)
     ? readdirSync(modelsDir, { withFileTypes: true })
     : []) {
-    if (!char.isDirectory()) continue;
+    if (!char.isDirectory() || RESERVED_DIRS.has(char.name)) continue;
     for (const skin of readdirSync(join(modelsDir, char.name), {
       withFileTypes: true,
     })) {

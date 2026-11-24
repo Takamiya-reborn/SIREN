@@ -98,6 +98,15 @@ ani 动态皮肤使用 spine 骨架动画而非 Cubism。资源成对出现：�
 
 ani 皮肤产物与 L2D 皮肤同目录约定（见第 4 节）。
 
+### 3.5 双形态换装转场（changeskin）
+
+部分皮肤存在双形态（L2D 与 ani 两个 bundle 并存），形态切换动画来自独立的 `changeskin/` bundle 类别：`ship_skin_template.change_skin` 配置指名转场 prefab（`action`），`index` 与转场骨架内动画名 `change_N` 同源、区分切换方向。此类 prefab 与 spinepainting 结构不同——骨架 `.skel`/`.atlas` 与贴图**内嵌主 bundle**，无 `_res` 依赖对。
+
+- 识别判据：isSpineBundle 命中且缺 `_res` 伴生、且主 bundle 内含 `.skel` TextAsset → 走 changeskin 分支（scripts/extract.js）；
+- 产物烘到 `models/changeskin/<action>/`（跨皮肤共享的顶级目录，dev 侧栏排除），元数据与皮肤 spine.json 同构，另含 `covers`；
+- `covers`（spineBake.js `cameraCoverRects()`）：转场骨架的镜头骨（如 jianwu3c 的 jingtou）被动画推拉，主画面四边形经镜头链全程变换的**时间交集矩形**按动画名归档（挂载本地 px，y-down）——查看器以 contain 语义贴合该矩形并附加 10% 安全余量，保证整段动画主画面恒覆盖视口（房间贴图边缘为羽化笔触，精确贴合会透底）；
+- 游戏端控制层为事件驱动：骨架事件 `action` = 换挂时机、`finish` = 换入动画时机（change_in 缺失回落 login）、finish 后延迟收覆盖层。查看器按此还原，但该链路整体处于探查阶段，实机对照与行为学挖掘未完成（详见仓库 `.agent/changeskin.md`，未定案）。
+
 ## 4. 产物与用途
 
 ```text
@@ -150,6 +159,7 @@ ani（spine）皮肤的产物布局：
 | `listener_data`                | 机器间参数联动与 idle 换挡               |
 | `effect` AnimationClip         | 常驻氛围参数叠加                         |
 | SkeletonDataAsset / .skel / .atlas | ani 皮肤骨架动画（pixi-spine 3.8 加载；initialSkin 语义回落 skins[1]，变体切换重挂） |
+| `change_skin` 配置 + changeskin 转场骨架 | 双形态形态开关的全屏转场覆盖层（骨架事件 `action`/`finish` 驱动换挂与换入；探查阶段，见 3.5 节） |
 
 因此，提取脚本的目标不是只生成一套静态模型，而是把渲染资源、动画路由、参数默认值和游戏控制层拆成可检查的文件，再由查看器重新组合成可交互模型。
 

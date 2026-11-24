@@ -29,6 +29,7 @@
 files/
 ├── AssetBundles/live2d/       # 每套 L2D 皮肤一个 UnityFS bundle
 ├── AssetBundles/spinepainting/ # ani 动态皮肤：主 bundle + <painting>_res 骨架资源对
+├── AssetBundles/changeskin/   # 双形态换装转场专用 prefab（见下文）
 ├── hashes.csv                 # 全类别 bundle 索引和哈希
 ├── hashes-live2d.csv          # live2d 类别索引和哈希
 ├── version-live2d.txt         # Live2D 资源版本
@@ -38,6 +39,8 @@ files/
 皮肤标识通常是 `<舰娘拼音>_<皮肤序号>`。索引中另存在 `_hx` 后缀的 bundle，是 CN 审核用的和谐变体（客户端在和谐模式下经 HXSet 自动改拉），本仓库不收录：拉取器与皮肤目录均默认跳过，一律使用非和谐版本。`hashes-live2d.csv` 只负责定位和校验，模型、Animator、AnimationClip、纹理和自定义 MonoBehaviour 都位于对应 bundle。
 
 ani 类动态皮肤不是 Cubism 而是 spine 骨架动画（spine 3.8）：`spinepainting/<painting>` 主 bundle 只含 SkeletonGraphic UI 预制体，骨架与贴图在伴生 `<painting>_res` bundle（SkeletonDataAsset、SpineAtlasAsset、.skel、.atlas、Texture2D）。预制体有两种组装：单 SkeletonGraphic，或根 GameObject 子层级按序挂多个 SkeletonGraphic 共享坐标系（分层合成，如人物多层分别出骨）。皮肤语义同 spine-unity 的 initialSkinName——空串不设皮肤，人物部件普遍存放在非 default 的命名皮肤里（如常规/誓约两套着装）。贴图是 spine 编辑器预乘 alpha（PMA）导出，游戏端以 PMA 材质混合渲染（羽化边缘依赖正确的预乘混合语义）。这类皮肤无 Animator 交互层，纯观看；提取与浏览器还原见 [unpack.md](unpack.md) 3.4 节。
+
+部分皮肤存在双形态：同一显示名下 L2D 与 ani 两个 bundle 并存（游戏数据里是两条独立模板，如 jianwu_2/jianwu_3），玩家可在两种形态间切换。切换动画由 `ship_skin_template.change_skin = {group, action, next, state, index, ...}` 数据驱动：`action` 指名 `changeskin/` 类别下的专用转场 prefab（内嵌 spine 骨架 `.skel`/`.atlas` 与贴图，无 `_res` 依赖对，与 spinepainting 的主/伴生结构不同），`index` 与转场骨架内的动画名 `change_N` 同源，区分切换方向。游戏端控制层（ChangeSkinMgr）按骨架事件驱动换挂与换入动画的时机；该系统的查看器还原处于探查阶段，实现细节与已知限制见仓库 `.agent/changeskin.md`（未定案）。此类 bundle 同样不在 pull_bundles.js 按名拉取范围内，需按 bundle 名手动 adb pull。
 
 一个皮肤在逻辑上由三组数据组成：
 

@@ -148,18 +148,19 @@ function resolveHitAreaRect(mainBundle) {
 }
 
 /**
- * 烘焙 spine 皮肤到 outDir。mainBundle 是主 bundle（已加载），resPath 是 <painting>_res bundle 路径。
+ * 烘焙 spine 皮肤到 outDir。mainBundle 是主 bundle（已加载），resBundle 是
+ * <painting>_res bundle（已加载；changeskin 转场类无 _res 依赖对时传 mainBundle 本身）。
  * 返回 spine.json 元数据对象。
  */
 export async function bakeSpine(
   outDir,
   modelId,
   mainBundle,
-  resPath,
+  resBundle,
   displayName,
 ) {
   mkdirSync(outDir, { recursive: true });
-  const res = await loadBundle(resPath);
+  const res = resBundle;
 
   // --- 变体表：res 内全部 SkeletonDataAsset，skeletonJSON -> TextAsset(.skel)、atlasAssets -> .atlas
   const resTrees = new Map();
@@ -238,6 +239,9 @@ export async function bakeSpine(
       width: parsed.width,
       height: parsed.height,
     };
+    // 转场镜头安全区（按动画归档）：挂载层 contain 贴合，整段动画主画面恒覆盖视口
+    const covers = cameraCoverRects(parsed);
+    if (covers) v.covers = covers;
     if (v.default || !canvas) canvas = v.canvas;
     v.skeleton = `${v.variant}.json`;
     v.raw = `${v.variant}.skel`;
@@ -253,13 +257,19 @@ export async function bakeSpine(
   }
 
   // --- atlas 文本落盘（.atlas 引用页名，贴图按原始名落盘即直接对上）
+  // 页面声明尺寸与实际贴图尺寸不一致时（美术 2x 导出 atlas、贴图减半导入，spine-unity 吃
+  // 归一化 UV 不受影响），按比例缩写该页全部区域坐标到贴图实际像素——pixi-spine 的
+  // region frame 按像素裁剪，坐标越出贴图即抛 "frame does not fit"
+  const texDims = new Map(
+    res.byClass("Texture2D").map((info) => [`${info.name}.png`, { w: info.object.width, h: info.object.height }]),
+  );
   for (const v of variants) {
     if (!v.atlas) throw new Error(`变体 ${v.variant} 的 atlas 引用落空`);
     const atlasText = textAssets.get(BigInt(v.atlasPathId));
     // 贴图是预乘 alpha（spine PMA 导出，游戏材质按 PMA 混合）；spine-unity 的 PMA 标志
     // 在材质 shader 上，TextAsset 原文没有该行，写入后 pixi-spine 把页面标为
     // ALPHA_MODES.PMA，上传时不再做二次预乘（否则羽化边缘发黑）。
-    const text = new TextDecoder().decode(atlasText.data)
+    const text = scaleAtlasPages(new TextDecoder().decode(atlasText.data), texDims)
       .replace(/^repeat:.+$/gm, (line) => `${line}\npma: true`);
     writeFileSync(join(outDir, v.atlas), Buffer.from(text, "utf8"));
   }
@@ -310,4 +320,167 @@ export async function bakeSpine(
 /** spine 皮肤目录守卫：模型目录是否已含 spine 元数据（供扫描/清理判断）。 */
 export function hasSpineMeta(dir, modelId) {
   return existsSync(join(dir, `${modelId}.spine.json`));
+}
+
+/** 转场镜头安全区：主画面四边形（最大附件，经其骨骼祖先链 setup 变换 + 链上动画
+ * 缩放/平移）在各动画全程的时间交集矩形——视口 contain 贴合此矩形即保证整段动画
+ * 主画面恒覆盖（镜头骨推拉平移不露边）。按动画名归档，坐标为挂载本地 px（×解析
+ * scale，y-down）。pixi-spine 的 yDown 只在根骨骼取负 scaleY。 */
+function cameraCoverRects(parsed) {
+  // 主画面槽位 = 附件面积最大者（region/mesh 的 width×height）
+  let best = null;
+  for (const skin of parsed.skins) {
+    for (const att of skin.attachments) {
+      const area = (att.width ?? 0) * (att.height ?? 0);
+      if (!best || area > best.area) best = { area, slot: att.slot, att };
+    }
+  }
+  if (!best) return null;
+  const boneByName = new Map(parsed.bones.map((b, i) => [b.name, i]));
+  const chain = [];
+  let bi = boneByName.get(parsed.slots[best.slot]?.bone) ?? -1;
+  while (bi >= 0) {
+    chain.unshift(bi);
+    bi = boneByName.get(parsed.bones[bi].parent) ?? -1;
+  }
+  if (!chain.length) return null;
+
+  // 链上各骨骼对链上动画时间轴的引用（name -> {scale, translate}），无动画的骨骼缺省
+  const animTls = new Map();
+  for (const anim of parsed.animations) {
+    const tls = { scale: [], translate: [], times: new Set() };
+    for (const tl of anim.bones) {
+      if (!chain.includes(tl.boneIndex)) continue;
+      const boneName = parsed.bones[tl.boneIndex].name;
+      if (tl.type === 2) tls.scale.push({ bone: boneName, frames: tl.frames });
+      if (tl.type === 1) tls.translate.push({ bone: boneName, frames: tl.frames });
+      for (const f of tl.frames) tls.times.add(f.time);
+    }
+    animTls.set(anim.name, tls);
+  }
+
+  // setup 仿射累积：M = Π translate(b.x,b.y)·rotate(b.rotation)·scale(b.scaleX, b.scaleY×(根骨骼 -1))
+  // 返回 {a,b,c,d,tx,ty}（x' = a·x + c·y + tx, y' = b·x + d·y + ty）
+  const compose = (M, bone, sxMul, syMul) => {
+    const rad = (bone.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const sx = bone.scaleX * sxMul, sy = bone.scaleY * syMul;
+    const a = sx * cos, b = sx * sin, c = -sy * sin, d = sy * cos;
+    return {
+      a: M.a * a + M.c * b,
+      b: M.b * a + M.d * b,
+      c: M.a * c + M.c * d,
+      d: M.b * c + M.d * d,
+      tx: M.a * bone.x + M.c * bone.y + M.tx,
+      ty: M.b * bone.x + M.d * bone.y + M.ty,
+    };
+  };
+  const IDENT = { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+  const setupM = (() => {
+    let M = IDENT;
+    chain.forEach((bi, i) => {
+      M = compose(M, parsed.bones[bi], 1, i === 0 ? -1 : 1);
+    });
+    return M;
+  })();
+  // 附件四边形四角（槽位骨骼局部系）
+  const att = best.att;
+  const hw = ((att.width ?? 0) * (att.scaleX ?? 1)) / 2;
+  const hh = ((att.height ?? 0) * (att.scaleY ?? 1)) / 2;
+  const rad = ((att.rotation ?? 0) * Math.PI) / 180;
+  const quad = [
+    [att.x - hw * Math.cos(rad) + hh * Math.sin(rad), att.y - hw * Math.sin(rad) - hh * Math.cos(rad)],
+    [att.x + hw * Math.cos(rad) + hh * Math.sin(rad), att.y + hw * Math.sin(rad) - hh * Math.cos(rad)],
+    [att.x + hw * Math.cos(rad) - hh * Math.sin(rad), att.y + hw * Math.sin(rad) + hh * Math.cos(rad)],
+    [att.x - hw * Math.cos(rad) - hh * Math.sin(rad), att.y - hw * Math.sin(rad) + hh * Math.cos(rad)],
+  ];
+  const localToWorld = (M, pt) => ({
+    x: M.a * pt[0] + M.c * pt[1] + M.tx,
+    y: M.b * pt[0] + M.d * pt[1] + M.ty,
+  });
+  const rectOf = (corners) => {
+    const xs = corners.map((p) => p.x), ys = corners.map((p) => p.y);
+    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  };
+
+  const S = 0.01; // 解析 scale，与挂载层一致
+  const covers = {};
+  for (const anim of parsed.animations) {
+    const tls = animTls.get(anim.name);
+    const times = [...tls.times].sort((a, b) => a - b);
+    let inter = null;
+    const sample = (t) => {
+      // 链上动画增量：scale 乘局部缩放，translate 加局部位置（帧值为 setup 的偏移）
+      let M = IDENT;
+      chain.forEach((bi, i) => {
+        const bone = { ...parsed.bones[bi] };
+        const boneName = parsed.bones[bi].name;
+        const sTl = tls.scale.find((s) => s.bone === boneName);
+        const tTl = tls.translate.find((s) => s.bone === boneName);
+        if (sTl) {
+          bone.scaleX *= sampleAt(sTl.frames, t, "x");
+          bone.scaleY *= sampleAt(sTl.frames, t, "y");
+        }
+        if (tTl) {
+          bone.x += sampleAt(tTl.frames, t, "x");
+          bone.y += sampleAt(tTl.frames, t, "y");
+        }
+        M = compose(M, bone, 1, i === 0 ? -1 : 1);
+      });
+      return rectOf(quad.map((p) => localToWorld(M, p)));
+    };
+    // 采样点 = 时间轴帧时间（角点位置分段线性，极值必在端点）
+    for (const t of times.length ? times : [0]) {
+      const r = sample(t);
+      if (!r) continue;
+      const scaled = { x: r.x * S, y: r.y * S, w: r.w * S, h: r.h * S };
+      if (!inter) inter = { ...scaled };
+      else {
+        const l = Math.max(inter.x, scaled.x), t2 = Math.max(inter.y, scaled.y);
+        const r2 = Math.min(inter.x + inter.w, scaled.x + scaled.w);
+        const b2 = Math.min(inter.y + inter.h, scaled.y + scaled.h);
+        inter = { x: l, y: t2, w: r2 - l, h: b2 - t2 };
+      }
+    }
+    if (inter && inter.w > 0 && inter.h > 0) covers[anim.name] = inter;
+  }
+  return Object.keys(covers).length ? covers : null;
+}
+
+function sampleAt(frames, t, key) {
+  if (t <= frames[0].time) return frames[0][key];
+  for (let i = 0; i < frames.length - 1; i++) {
+    const a = frames[i], b = frames[i + 1];
+    if (t >= a.time && t <= b.time) {
+      const k = (t - a.time) / (b.time - a.time || 1);
+      return a[key] + (b[key] - a[key]) * k;
+    }
+  }
+  return frames[frames.length - 1][key];
+}
+
+/** 按贴图实际尺寸缩写 atlas 页面坐标。页名 = 紧邻根级 size: 行上方的根级名行；
+ * 页内区域坐标（xy/size/orig/offset/bounds/pad）随页尺寸等比缩放，UV 占比不变。
+ * 尺寸一致的页原样返回。 */
+function scaleAtlasPages(text, texDims) {
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^size:\s*(\d+),\s*(\d+)/);
+    if (!m) continue;
+    let nameLine = i - 1;
+    while (nameLine >= 0 && !lines[nameLine].trim()) nameLine--;
+    const tex = texDims.get(lines[nameLine]?.trim());
+    if (!tex) continue;
+    const dw = parseInt(m[1]), dh = parseInt(m[2]);
+    if (dw === tex.w && dh === tex.h) continue;
+    const sx = tex.w / dw, sy = tex.h / dh;
+    lines[i] = `size: ${tex.w},${tex.h}`;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (/^size:\s*\d+,\s*\d+/.test(lines[j])) break; // 下一页的页面 size（页名隔在中间）
+      const mm = lines[j].match(/^(\s*)(xy|size|orig|offset|bounds|pad):\s*(-?\d+),\s*(-?\d+)/);
+      if (mm)
+        lines[j] = `${mm[1]}${mm[2]}: ${Math.round(parseInt(mm[3]) * sx)},${Math.round(parseInt(mm[4]) * sy)}`;
+    }
+  }
+  return lines.join("\n");
 }

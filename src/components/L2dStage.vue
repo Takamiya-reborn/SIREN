@@ -195,14 +195,21 @@ onBeforeUnmount(() => {
   fpsTimer = null
   rippleCtl?.destroy()
   rippleCtl = null
-  ctx.hintsCtl?.destroy()
-  // children:true 收掉 spine 分层壳的全部分区（pixi v6 裸 destroy 只摘离不销毁 children）
-  ctx.model?.destroy({ children: true })
+  try { ctx.hintsCtl?.destroy() } catch (e) { console.error('[stage] hints 销毁失败', e) }
+  // 换装转场覆盖层与皮肤挂载链独立，舞台卸载须随 ctx 一并拆。
+  // 各销毁步骤包 try：任一步抛错都不许跳过下面的 app.destroy——pixi-spine 的 destroy
+  // 走完才摘离父节点，半销毁对象滞留舞台会被本 app ticker 逐帧渲染整帧崩死
+  try { ctx._changeOverlay?.destroy() } catch (e) { console.error('[stage] 转场层销毁失败', e) }
+  ctx._changeOverlay = null
+  // children:true 收掉 spine 分层壳的全部分区（pixi v6 裸 destroy 只摘离不销毁 children）。
+  // 先摘离再销毁：destroy 中途抛错不许把半销毁对象留在渲染树里
+  if (ctx.model && ctx.app) ctx.app.stage.removeChild(ctx.model)
+  try { ctx.model?.destroy({ children: true }) } catch (e) { console.error('[stage] 模型销毁失败', e) }
+  ctx.model = null
   canvasHost.value.__pixiApp = null
-  app?.destroy(true)
+  try { app?.destroy(true) } catch (e) { console.error('[stage] app 销毁失败', e) }
   ctx.app = null
   ctx.view = null
-  ctx.model = null
 })
 
 watch(() => props.modelUrl, (url) => url && mountModel(ctx, url))
@@ -218,6 +225,27 @@ defineExpose({
     ctx.model?.state && ctx._spineTransition
       ? ctx._spineTransition(group)
       : ctx.actions.playTransition(group),
+  /** 换装转场覆盖层（change_skin.action）：changeskin/<action> 烘焙产物全屏播放，
+   * 返回 {swap, finished, destroy}；未烘焙返回 null，调用方退化直切链。
+   * 动态 import 与 spineMount 同策略：pixi-spine 不进舞台主包 */
+  playChangeSkin: (action, index) =>
+    import('../l2d/changeskinOverlay').then((m) => m.playChangeOverlay(ctx, action, index)),
+  /** 预热转场覆盖层（后台加载进缓存，不播） */
+  warmChangeSkin: (action) =>
+    import('../l2d/changeskinOverlay').then((m) => m.warmChangeOverlay(action)),
+  /** 换入动画（finish 事件时机由 App 编排）：游戏两级 fallback——change_in 存在放
+   * change_in，缺失回落 login（mainlive2dpainting/mainspinepainting 同语义） */
+  playChangeIn: (group) => {
+    const model = ctx.model
+    if (!model) return
+    if (model.state && ctx._spineTrigger) {
+      const has = !!model.spineData.findAnimation(group)
+      ctx._spineTrigger(has ? group : 'login')
+    } else {
+      const has = !!(model.internalModel?.settings?.motions?.[group]?.length)
+      ctx.actions.playMotion(has ? group : 'login')
+    }
+  },
   setEntryGroup: (group) => {
     ctx._entryGroup = group ?? null
   },

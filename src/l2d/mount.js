@@ -271,13 +271,19 @@ async function mountModelInner(ctx, url) {
     entryIdle = wantIdle;
     manager.stopAllMotions();
     ctx.runtime.resetParameters();
-    // 换入组起播：揭幕即 change_in（基底 idle 已被换出动画的定格收尾覆盖，这里不再先播 idle）
-    if (
-      pendingEntry &&
-      (model.internalModel.settings?.motions?.[pendingEntry]?.length ?? 0)
-    ) {
+    // 换入组起播：揭幕即 change_in（基底 idle 已被换出动画的定格收尾覆盖，这里不再先播 idle）。
+    // 登记组缺失回落 login（游戏 PlayChangeSkinActionIn 的两级 fallback），两者皆无走 idle；
+    // 未登记（普通换肤）不播换入组，走基础 idle 入口
+    const entryGroup = pendingEntry
+      ? (model.internalModel.settings?.motions?.[pendingEntry]?.length ?? 0)
+        ? pendingEntry
+        : (model.internalModel.settings?.motions?.login?.length ?? 0)
+          ? "login"
+          : null
+      : null;
+    if (entryGroup) {
       entryReveal = true;
-      ctx.actions.playMotion(pendingEntry);
+      ctx.actions.playMotion(entryGroup);
     } else {
       // auto idle 在 Live2DModel.from 时已创建同支 motion（渐入取 fades 表 0.5s），直接改写其渐入时长；尚未创建的由 createMotion 的一次性标记兜住
       const idleGroup = ctx.runtime.idleGroup;
@@ -334,8 +340,15 @@ async function mountModelInner(ctx, url) {
         // children:true 是给 spine 分层壳（Container）的：pixi v6 裸 destroy 只摘离不销毁
         // children，各分区骨架/贴图数据会随形态切换逐次泄漏（L2D 模型无 children，等价裸 destroy）
         if (oldModel && !oldModel.destroyed) {
+          // 先摘离后销毁；销毁推迟一帧（GPU 释放开销大），转场覆盖层播放中不卡帧
           app.stage.removeChild(oldModel);
-          oldModel.destroy({ children: true });
+          requestAnimationFrame(() => {
+            try {
+              if (!oldModel.destroyed) oldModel.destroy({ children: true });
+            } catch (e) {
+              console.error('[l2d] 旧模型销毁失败', e);
+            }
+          });
         }
         if (ctx.model) ctx.model.visible = true;
         ctx.status.value = "";

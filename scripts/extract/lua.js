@@ -129,6 +129,11 @@ export function readAllSkinTemplates(text) {
             painting: template.painting,
             ship_group: template.ship_group,
             skin_type: template.skin_type,
+            // 换装形态开关配置：action 指名 changeskin/<action> 转场 bundle，index 是方向序（与
+            // 转场骨架动画名 change_N 同源）；普通皮肤该字段是空串，归一为 null
+            change_skin: template.change_skin && typeof template.change_skin === "object" && template.change_skin.action
+                ? { action: template.change_skin.action, index: template.change_skin.index }
+                : null,
         }
     })
 }

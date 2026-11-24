@@ -56,13 +56,37 @@ async function setForm(next) {
   try {
     stageRef.value?.holdReveal()
     try {
-      // playAndWait 捕获换出钩子须先于挂载链清钩子（mount 置空 _spineTransition 等），
-      // 所以先取 promise 再置 activeForm 开挂；watcher 是微任务，挂载同步段消费 _entryGroup
-      // 之前 setEntryGroup 一定已登记
-      const outDone = stageRef.value?.playAndWait('change_out')
-      stageRef.value?.setEntryGroup?.(next === 'ani' ? 'login' : 'change_in')
-      activeForm.value = next
-      await outDone
+      // 换装转场覆盖层（change_skin.action 指名，如 jianwu 的 jianwu3c）：全屏 cutscene，
+      // 骨架事件 action=黑幕换挂时机、finish=换入动画时机；未烘焙退化为模型自身
+      // change_out 单发链。方向序取目标形态 painting 的配置——游戏 ChangeSkinMgr.play
+      // 传目标皮肤 id（切进谁的房间就放谁的 index，change_N 与之同源）
+      const targetPainting = next === 'ani' ? entry.altPaintings[0] : entry.painting
+      const cs = entry.changeSkins?.[targetPainting]
+      const fromPainting = activeForm.value === 'ani' ? entry.altPaintings[0] : entry.painting
+      const overlay = cs ? await stageRef.value?.playChangeSkin(cs.action, cs.index) : null
+      if (overlay) {
+        // 游戏语义（ChangeSkinMgr 事件驱动）：`action` 事件=黑幕换挂时机，`finish` 事件=
+        // 放换入动画（change_in 缺失回落 login），覆盖层在 finish 后再留一拍才拆。
+        // 揭幕即 login 会和转场后半段叠着播，故换入动画压在 finish 之后
+        activeForm.value = next
+        await overlay.swap
+        stageRef.value?.releaseReveal()
+        await overlay.finished
+        if (activeId.value === id) {
+          stageRef.value?.playChangeIn('change_in')
+          // 回填预热缓存：下次切换走反方向，预热来时形态的转场配置
+          const back = entry.changeSkins?.[fromPainting]
+          if (back) stageRef.value?.warmChangeSkin(back.action)
+        }
+      } else {
+        // playAndWait 捕获换出钩子须先于挂载链清钩子（mount 置空 _spineTransition 等），
+        // 所以先取 promise 再置 activeForm 开挂；watcher 是微任务，挂载同步段消费 _entryGroup
+        // 之前 setEntryGroup 一定已登记
+        const outDone = stageRef.value?.playAndWait('change_out')
+        stageRef.value?.setEntryGroup?.(next === 'ani' ? 'login' : 'change_in')
+        activeForm.value = next
+        await outDone
+      }
     } finally {
       stageRef.value?.releaseReveal()
     }
@@ -114,6 +138,13 @@ const activeTrigger = ref('')
  * 由挂载链消费 setEntryGroup 登记的换入组，揭幕瞬间起播 */
 function onStageMotions(ids) {
   triggers.value = ids
+  // 双形态皮肤预热换装转场覆盖层：首切零停顿（无预热时覆盖层加载有数百毫秒空窗）。
+  // 预热目标 = 切换方向的目标形态（反方向侧）的转场配置。形态切换进行中不预热——
+  // 挂载完成恰逢转场播放中，此刻重新解析骨架会把转场卡出可见顿帧
+  const entry = CATALOG.entries.find((e) => e.painting === activeId.value)
+  const targetPainting = activeForm.value === 'ani' ? activeId.value : entry?.altPaintings?.[0]
+  const cs = entry?.changeSkins?.[targetPainting]
+  if (cs && !switching.value) stageRef.value?.warmChangeSkin(cs.action)
 }
 /**
  * 状态触发面板展示全量动作组：idle/touch_idle/touch_drag 等常驻与手势组也出

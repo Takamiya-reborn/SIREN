@@ -1,5 +1,5 @@
 {
-  "version": "0.0.1620",
+  "version": "0.0.1625",
   "entries": [
     {
       "painting": "junhe_4",
@@ -160,7 +160,18 @@
       "skin_id": 802032,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "jishang_3": {
+          "action": "changeAsmr",
+          "index": 1
+        }
+      },
       "camp": 8
+    },
+    {
+      "painting": "moluotuofu_2",
+      "name": "moluotuofu_2",
+      "derived": true
     },
     {
       "painting": "chuixue_3",
@@ -223,6 +234,13 @@
       "ani": true,
       "l2d": false,
       "camp": 4
+    },
+    {
+      "painting": "xinuopu_2",
+      "name": "xinuopu_2",
+      "derived": true,
+      "ani": true,
+      "l2d": false
     },
     {
       "painting": "z23",
@@ -593,6 +611,16 @@
       "name": "缠丝审讯",
       "ship_group": 70502,
       "skin_id": 705022,
+      "changeSkins": {
+        "suweiaitongmeng_4": {
+          "action": "changeBlack",
+          "index": 1
+        },
+        "suweiaitongmeng_3": {
+          "action": "changeBlack",
+          "index": 2
+        }
+      },
       "camp": 7,
       "ani": true,
       "altPaintings": [
@@ -958,6 +986,16 @@
       "name": "共坠的渴慕",
       "ship_group": 90107,
       "skin_id": 901073,
+      "changeSkins": {
+        "mojiaduoer_5": {
+          "action": "changeBlack",
+          "index": 2
+        },
+        "mojiaduoer_4": {
+          "action": "changeBlack",
+          "index": 1
+        }
+      },
       "camp": 9,
       "ani": true,
       "altPaintings": [
@@ -1095,6 +1133,12 @@
       "name": "红封之礼",
       "ship_group": 49902,
       "skin_id": 499023,
+      "changeSkins": {
+        "feiteliedadi_4": {
+          "action": "changeBlack",
+          "index": 1
+        }
+      },
       "camp": 4
     },
     {
@@ -1118,6 +1162,16 @@
       "skin_id": 301191,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "tianjinfeng_3": {
+          "action": "changeBlack",
+          "index": 2
+        },
+        "tianjinfeng_2": {
+          "action": "changeBlack",
+          "index": 1
+        }
+      },
       "camp": 3,
       "altPaintings": [
         "tianjinfeng_3"
@@ -1269,6 +1323,16 @@
       "skin_id": 317022,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "i404_2": {
+          "action": "changeBlack",
+          "index": 1
+        },
+        "i404_3": {
+          "action": "changeBlack",
+          "index": 2
+        }
+      },
       "camp": 3,
       "altPaintings": [
         "i404_2"
@@ -1279,6 +1343,16 @@
       "name": "交错的温柔时光",
       "ship_group": 10710,
       "skin_id": 107102,
+      "changeSkins": {
+        "yuekechengii_4": {
+          "action": "yuekechengII4",
+          "index": 1
+        },
+        "yuekechengii_3": {
+          "action": "yuekechengII4",
+          "index": 2
+        }
+      },
       "camp": 1,
       "ani": true,
       "altPaintings": [
@@ -1421,6 +1495,14 @@
       "camp": 106
     },
     {
+      "painting": "keliaopeitela_3",
+      "name": "克利奥佩特拉（改造）",
+      "derived": true,
+      "ani": true,
+      "l2d": false,
+      "camp": 2
+    },
+    {
       "painting": "lafei",
       "name": "拉菲",
       "ship_group": 10117,
@@ -1544,6 +1626,12 @@
       "skin_id": 202381,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "hu_2": {
+          "action": "changeAsmr",
+          "index": 1
+        }
+      },
       "camp": 2
     },
     {
@@ -2011,6 +2099,16 @@
       "skin_id": 307171,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "yunlong_3": {
+          "action": "changeBlack",
+          "index": 2
+        },
+        "yunlong_2": {
+          "action": "changeBlack",
+          "index": 1
+        }
+      },
       "camp": 3,
       "altPaintings": [
         "yunlong_3"
@@ -2091,6 +2189,16 @@
       "skin_id": 102362,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "weikesibao_2": {
+          "action": "changeBlack",
+          "index": 1
+        },
+        "weikesibao_3": {
+          "action": "changeBlack",
+          "index": 2
+        }
+      },
       "camp": 1,
       "altPaintings": [
         "weikesibao_2"
@@ -2287,6 +2395,12 @@
       "skin_id": 402074,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "aimudeng_5": {
+          "action": "changeAsmr",
+          "index": 1
+        }
+      },
       "camp": 4
     },
     {
@@ -2599,6 +2713,16 @@
       "name": "微笑的白色魅影",
       "ship_group": 960003,
       "skin_id": 9600032,
+      "changeSkins": {
+        "jinluhao_4": {
+          "action": "changeBlack",
+          "index": 1
+        },
+        "jinluhao_3": {
+          "action": "changeBlack",
+          "index": 2
+        }
+      },
       "camp": 96,
       "ani": true,
       "altPaintings": [
@@ -2720,6 +2844,16 @@
       "name": "午夜的瑰色电梯",
       "ship_group": 30409,
       "skin_id": 304091,
+      "changeSkins": {
+        "antu_3": {
+          "action": "changeBlack",
+          "index": 2
+        },
+        "antu_2": {
+          "action": "changeBlack",
+          "index": 1
+        }
+      },
       "camp": 3,
       "ani": true,
       "altPaintings": [
@@ -2914,6 +3048,12 @@
       "skin_id": 499024,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "feiteliedadi_5": {
+          "action": "changeBlack",
+          "index": 2
+        }
+      },
       "camp": 4
     },
     {
@@ -2980,6 +3120,12 @@
       "skin_id": 502121,
       "ani": true,
       "l2d": false,
+      "changeSkins": {
+        "haichou_2": {
+          "action": "changeAsmr",
+          "index": 1
+        }
+      },
       "camp": 5
     },
     {
@@ -3616,6 +3762,16 @@
       "name": "妆点，只为今夜",
       "ship_group": 50301,
       "skin_id": 503011,
+      "changeSkins": {
+        "jianwu_3": {
+          "action": "jianwu3c",
+          "index": 2
+        },
+        "jianwu_2": {
+          "action": "jianwu3c",
+          "index": 1
+        }
+      },
       "camp": 5,
       "ani": true,
       "altPaintings": [

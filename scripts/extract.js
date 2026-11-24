@@ -137,6 +137,20 @@ async function main() {
   if (isSpineBundle(bundle)) {
     const resPath = join(BUNDLE_DIR, `${modelId}_res`);
     if (!existsFile(resPath)) {
+      // changeskin 换装转场 prefab（ship_skin_template 的 change_skin.action 指名，如 jianwu3c）：
+      // 骨架/图集/贴图全部内嵌主 bundle，无 _res 依赖对。烘到全局共享目录 models/changeskin/<action>/，
+      // 供查看器形态开关按 action 叠加播放
+      if (bundle.byClass("TextAsset").some((t) => t.name.endsWith(".skel"))) {
+        const meta = await bakeSpine(
+          join(MODEL_ROOT, "changeskin", modelId),
+          modelId,
+          bundle,
+          bundle,
+          modelId,
+        );
+        console.log(`换装转场烘焙完成: ${modelId}（${meta.variants.length} 个骨架变体）-> ${join("models", "changeskin", modelId)}`);
+        return;
+      }
       console.error(`缺少 ${modelId}_res（spine 骨架资源对），先 node scripts/pull_bundles.js ${modelId}`);
       process.exit(1);
     }
@@ -144,7 +158,7 @@ async function main() {
     try {
       displayName = readTemplateByPainting(readFileSync(join(ROOT, ".tmp", "lua", "CN", "sharecfgdata", "ship_skin_template.lua"), "utf8"), modelId).name;
     } catch { } // lua 快照缺失/模板未收录时回退 painting 名
-    const meta = await bakeSpine(outDir, modelId, bundle, resPath, displayName);
+    const meta = await bakeSpine(outDir, modelId, bundle, await loadBundle(resPath), displayName);
     console.log(`spine 皮肤烘焙完成: ${meta.name}（${meta.variants.length} 个骨架变体）-> ${outDir}`);
     return;
   }

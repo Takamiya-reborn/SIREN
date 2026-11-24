@@ -19,6 +19,7 @@
 
 - 落笔方言是 pixi-spine 3.8 读取器，非官方 spine JSON：skins 数组形态 `[{name, attachments:{槽:{附件}}}]`；events/ik/transform/path 时间轴按名键控映射；曲线是 curve/c2/c3/c4 四独立键；clipping 的 `end` 键取槽名非序号；加权顶点 `weightedFlat()` 平铺成 `[count, boneIdx, x, y, weight, ...]` 单数组（运行时靠 vertices.length≠uvs.length 判加权，不读独立 bones 字段）。
 - 附件类型 0..6 全覆盖（region/boundingbox/mesh/linkedmesh/path/point/clipping）。
+- 槽位两色暗色必须落 `dark` 键：二进制 `rgba2` 是 RGB888 整数（-1 哨兵=无两色，省略键），落 "#rrggbb"。pixi-spine 仅在槽位带 dark 时创建 Slot.darkColor（Slot 构造 `darkColor = data.darkColor == null ? null : new Color()`），twoColor 时间轴逐帧直接写它——缺键即 `null.set` 每帧崩（spine-unity C# 的 darkColor 是非空结构体，游戏本体无此分歧）。影响面排查：twoColor 时间轴目标槽位必须有 dark（jianwu_3 的 login/touch_special 曾中招）。
 - 旧名修补 `repairName()`：美术迭代改附件名后，槽位 setup 名与动画 attachment/deform 时间轴引用的旧名解析落空，按同槽位附件名集合做最长公共前缀修补（单候选直接采用，多候选须有公共前缀）；修补后仍落空的 deform 条目丢弃——游戏读取器静默跳过，pixi-spine 3.8 JSON 读取器严格解析会整体抛错。
 
 ## 烘焙（spineBake.js `bakeSpine()`）
@@ -30,6 +31,7 @@
 - 贴图行序统一 top-down：ASTC 与 exportFile 两路径翻转口径一致（texture.js `decodeAstcTexture()` flip 默认 true；flip=false 保留 Unity 自底向上原始行序）。pixi-spine 无 spine-unity 的内部 UV 转换，必须给标准 top-down PNG。
 - 坑：.skel/.atlas 的 TextAsset 必须经 `info.object.data` 取原始字节；typetree 的 m_Script 经 UTF-8 解码已毁二进制段。
 - 贴图是预乘 alpha（spine PMA 导出，游戏材质按 PMA 混合）：spine-unity 的 PMA 标志记在材质 shader 上，.atlas TextAsset 原文没有 `pma:` 行，落盘时在每个 page 的 `repeat:` 行后补写 `pma: true`；pixi-spine 的 TextureAtlas 解析到该行会把页面标为 `ALPHA_MODES.PMA`，上传时不再预乘——缺标志则按默认 UNPACK 二次预乘，羽化边缘变灰黑描边。已烘焙的旧产物可对 .atlas 就地补行，无需重烘焙（贴图字节本就无损保留预乘像素）。
+- atlas 页面声明尺寸与实际贴图尺寸可能不一致（美术按 2x 导出 atlas、贴图减半导入）：spine-unity 吃归一化 UV 无碍，pixi-spine 的 region frame 按像素裁剪，坐标越出即抛 "frame does not fit"。落盘时按贴图实际尺寸等比缩写该页全部区域坐标（spineBake.js `scaleAtlasPages()`），UV 占比不变；尺寸一致的页原样返回。
 - 入口：extract.js `main()` spine 分支——isSpineBundle 命中则要求 BUNDLE_DIR 下存在 `<modelId>_res`（缺失即报错），显示名经 lua.js `readTemplateByPainting()` 取自 ship_skin_template.lua，`bakeSpine()` 后直接 return，不走 L2D 管线。
 - 烘焙进度走 `[progress] <pct> <label>` stdout 协议（dev server 解析成进度条）。
 
@@ -43,6 +45,7 @@
 - 交互全旁路：ctx.runtime / ctx.orch / ctx.l2dOffset 保持 null（无交互状态机、无参数机、无取景 offset）；gestures 的 followGaze/resetGaze 走可选链旁路，onPointerUp 命中段对无 internalModel 直接 return；HUD 差分采样仅挂 Live2D internalModel，spine 整段跳过。
 - 宿主钩子：`ctx._spineFit`（camera.js `fitModel()` 的 spine 分支转发）与 `ctx._spinePlay`（L2dStage.vue `play(group)` 的 spine 分支，变体切换）。上报触发组：单骨架 = 变体名列表，分层 = 空数组（重挂即复位）。
 - 揭幕语义：加载完成即上台（无 L2D 入场硬切）。
+- 换装形态开关的转场覆盖层（changeskin/<action>）走独立链路，机制/标定/坑见 changeskin.md（探查纪要，未定案）。
 - vite.config.js `optimizeDeps.include: ["@pixi-spine/all-3.8"]`：该包 CJS 且 import 有模块级副作用（自动注册 Loader 插件），冷发现式预构建会在会话中途重跑使旧 ？v= 哈希失效。
 
 ## 目录与 dev 伺服

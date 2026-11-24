@@ -22,7 +22,7 @@ const FRAME_ACTIVE = 0.4;
 
 /** 当前挂载附件的骨架本地包围盒列表（分层预制体逐分区收集）。只统计在挂附件，
  * path/point 等无世界顶点的类型与求值异常项跳过。 */
-function attachmentBoxes(model) {
+export function attachmentBoxes(model) {
     const skeletons = model.skeleton
       ? [model.skeleton]
       : (model.children ?? []).filter((c) => c.skeleton).map((c) => c.skeleton);
@@ -259,11 +259,16 @@ async function mountSpineInner(ctx, url, variantOverride) {
         applySkin(model, variant);
         firstStart = startPart(model, variant);
         // 换入组登记（起播推迟到揭幕闸门放行后，见下）：login 单发后接 starting 循环，
-        // 揭幕即换入动画，不再先露 normal 循环
-        entryAnim =
-            pendingEntry && model.spineData.findAnimation(pendingEntry)
+        // 揭幕即换入动画，不再先露 normal 循环。登记组缺失时回落 login（游戏
+        // PlayChangeSkinActionIn 的两级 fallback：change_in -> login）；未登记（普通换肤）
+        // 不播换入组，走 startingAnimation
+        entryAnim = pendingEntry
+            ? model.spineData.findAnimation(pendingEntry)
                 ? pendingEntry
-                : null;
+                : model.spineData.findAnimation("login")
+                  ? "login"
+                  : null
+            : null;
         const overlays = expressionOverlays(model.spineData);
         if (overlays.length) {
             model.state.setAnimation(1, overlays[0], true);
@@ -301,9 +306,23 @@ async function mountSpineInner(ctx, url, variantOverride) {
     ctx.orch = null;
     ctx.l2dOffset = null;
     // children:true 收掉分层壳（Container）下的全部分区：pixi v6 裸 destroy 只摘离
-    // 不销毁 children，各分区骨架/贴图数据会随换挂逐次泄漏（L2D 模型无 children，等价裸 destroy）
-    ctx.model?.destroy({ children: true });
+    // 不销毁 children，各分区骨架/贴图数据会随换挂逐次泄漏（L2D 模型无 children，等价裸 destroy）。
+    // 必须先摘离再销毁：pixi-spine 的 destroy 走到最后才摘离父节点，中途抛错（如网格/贴图
+    // 释放失败）会把半销毁对象滞留舞台，被本 app ticker 逐帧渲染整帧崩死
+    const oldModel = ctx.model;
     ctx.model = model;
+    if (oldModel) {
+        // 先摘离后销毁；销毁（GPU 资源释放有几十毫秒开销）推迟一帧——转场覆盖层播放中
+        // 的换挂若同步销毁，旧 L2D 模型的释放会把转场卡出可见顿帧
+        app.stage.removeChild(oldModel);
+        requestAnimationFrame(() => {
+            try {
+                if (!oldModel.destroyed) oldModel.destroy({ children: true });
+            } catch (err) {
+                console.error("[spine] 旧模型销毁失败", err);
+            }
+        });
+    }
     app.stage.addChild(model);
 
     ctx.status.value = "";
