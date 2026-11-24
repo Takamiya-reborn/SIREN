@@ -37,7 +37,7 @@ files/
 
 皮肤标识通常是 `<舰娘拼音>_<皮肤序号>`。索引中另存在 `_hx` 后缀的 bundle，是 CN 审核用的和谐变体（客户端在和谐模式下经 HXSet 自动改拉），本仓库不收录：拉取器与皮肤目录均默认跳过，一律使用非和谐版本。`hashes-live2d.csv` 只负责定位和校验，模型、Animator、AnimationClip、纹理和自定义 MonoBehaviour 都位于对应 bundle。
 
-ani 类动态皮肤不是 Cubism 而是 spine 骨架动画（spine 3.8）：`spinepainting/<painting>` 主 bundle 只含 SkeletonGraphic UI 预制体，骨架与贴图在伴生 `<painting>_res` bundle（SkeletonDataAsset、SpineAtlasAsset、.skel、.atlas、Texture2D）。预制体有两种组装：单 SkeletonGraphic，或根 GameObject 子层级按序挂多个 SkeletonGraphic 共享坐标系（分层合成，如人物多层分别出骨）。皮肤语义同 spine-unity 的 initialSkinName——空串不设皮肤，人物部件普遍存放在非 default 的命名皮肤里（如常规/誓约两套着装）。这类皮肤无 Animator 交互层，纯观看；提取与浏览器还原见 [unpack.md](unpack.md) 3.4 节。
+ani 类动态皮肤不是 Cubism 而是 spine 骨架动画（spine 3.8）：`spinepainting/<painting>` 主 bundle 只含 SkeletonGraphic UI 预制体，骨架与贴图在伴生 `<painting>_res` bundle（SkeletonDataAsset、SpineAtlasAsset、.skel、.atlas、Texture2D）。预制体有两种组装：单 SkeletonGraphic，或根 GameObject 子层级按序挂多个 SkeletonGraphic 共享坐标系（分层合成，如人物多层分别出骨）。皮肤语义同 spine-unity 的 initialSkinName——空串不设皮肤，人物部件普遍存放在非 default 的命名皮肤里（如常规/誓约两套着装）。贴图是 spine 编辑器预乘 alpha（PMA）导出，游戏端以 PMA 材质混合渲染（羽化边缘依赖正确的预乘混合语义）。这类皮肤无 Animator 交互层，纯观看；提取与浏览器还原见 [unpack.md](unpack.md) 3.4 节。
 
 一个皮肤在逻辑上由三组数据组成：
 

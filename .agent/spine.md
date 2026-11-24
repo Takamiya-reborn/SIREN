@@ -29,6 +29,7 @@
   - 每变体：`<变体>.json`（spine 3.8 JSON）+ `<变体>.skel`（原始字节归档）+ `.atlas` + 贴图 PNG（按 atlas 页原始名落盘）。
 - 贴图行序统一 top-down：ASTC 与 exportFile 两路径翻转口径一致（texture.js `decodeAstcTexture()` flip 默认 true；flip=false 保留 Unity 自底向上原始行序）。pixi-spine 无 spine-unity 的内部 UV 转换，必须给标准 top-down PNG。
 - 坑：.skel/.atlas 的 TextAsset 必须经 `info.object.data` 取原始字节；typetree 的 m_Script 经 UTF-8 解码已毁二进制段。
+- 贴图是预乘 alpha（spine PMA 导出，游戏材质按 PMA 混合）：spine-unity 的 PMA 标志记在材质 shader 上，.atlas TextAsset 原文没有 `pma:` 行，落盘时在每个 page 的 `repeat:` 行后补写 `pma: true`；pixi-spine 的 TextureAtlas 解析到该行会把页面标为 `ALPHA_MODES.PMA`，上传时不再预乘——缺标志则按默认 UNPACK 二次预乘，羽化边缘变灰黑描边。已烘焙的旧产物可对 .atlas 就地补行，无需重烘焙（贴图字节本就无损保留预乘像素）。
 - 入口：extract.js `main()` spine 分支——isSpineBundle 命中则要求 BUNDLE_DIR 下存在 `<modelId>_res`（缺失即报错），显示名经 lua.js `readTemplateByPainting()` 取自 ship_skin_template.lua，`bakeSpine()` 后直接 return，不走 L2D 管线。
 - 烘焙进度走 `[progress] <pct> <label>` stdout 协议（dev server 解析成进度条）。
 

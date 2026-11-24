@@ -5,6 +5,7 @@ import { buildCatalog, parseSpinePaintings } from "../../gen_catalog.js";
 import {
   classifyState,
   isAniPainting,
+  pullPaintings,
   resolveCatalogEntry,
 } from "../../dev/api.js";
 import { readAllSkinTemplates } from "../../extract/lua.js";
@@ -255,6 +256,27 @@ check(
 check(
   "不在目录非 ani（白名单先行拒绝）",
   isAniPainting(formCatalog, "ghost") === false,
+);
+
+// 双形态条目一次拉全：基底 + altPaintings 去重入列，已烘焙的侧跳过
+section("pullPaintings");
+const none = new Set();
+eq(
+  "双形态条目基底+alt 一次拉全",
+  pullPaintings(formCatalog.entries[0], none).join(","),
+  "skin_l,skin_s",
+);
+eq("纯 l2d 条目只拉基底", pullPaintings(formCatalog.entries[2], none).join(","), "skin_only");
+eq("纯 ani 条目只拉基底", pullPaintings(formCatalog.entries[1], none).join(","), "skin_ani");
+eq(
+  "已烘焙的侧跳过（形态开关补拉 alt 时基底不重拉）",
+  pullPaintings(formCatalog.entries[0], new Set(["skin_l"])).join(","),
+  "skin_s",
+);
+eq(
+  "两侧都烘焙则列表为空（409 已烘焙）",
+  pullPaintings(formCatalog.entries[0], new Set(["skin_l", "skin_s"])).length,
+  0,
 );
 
 finish();

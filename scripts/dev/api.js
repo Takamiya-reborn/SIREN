@@ -199,14 +199,22 @@ function runStep(args, timeout, push, onLine = null) {
   });
 }
 
-function startJob(painting, catalog) {
+/** 一次拉取任务的 painting 列表：双形态条目（altPaintings 非空）基底与 alt 一次拉全，去重并跳过已烘焙的侧。 */
+export function pullPaintings(entry, bakedIds) {
+  const names = [entry.painting, ...(entry.altPaintings ?? [])];
+  return names.filter(
+    (name, i) => names.indexOf(name) === i && !bakedIds.has(name),
+  );
+}
+
+function startJob(paintings, catalog) {
   const push = (line) => {
     job.log.push(line);
     if (job.log.length > LOG_LIMIT)
       job.log.splice(0, job.log.length - LOG_LIMIT);
   };
   job = {
-    painting,
+    paintings,
     phase: "pull",
     status: "running",
     log: [],
@@ -214,43 +222,67 @@ function startJob(painting, catalog) {
     startedAt: Date.now(),
     progress: { percent: 2, label: "准备拉取" },
   };
-  // pull 阶段进度：按本地 bundle 文件增长对比索引里的远端大小轮询；查不到大小则不定态。
-  // Ani 皮肤盯 _res 依赖对（骨架数据所在的大文件，主 bundle 只有几 KB 的 UI 预制体）
-  const isAni = isAniPainting(catalog, painting);
-  const localPath = join(BUNDLES_DIR, isAni ? `${painting}_res` : painting);
-  const remoteSize = bundleRemoteSize(painting, isAni);
+  // pull 阶段进度：按本地 bundle 文件增长对比索引里的远端大小轮询（多 painting 求和）；
+  // 任一大小查不到则不定态。Ani 皮肤盯 _res 依赖对（骨架数据所在的大文件，主 bundle 只有几 KB 的 UI 预制体）
+  const targets = paintings.map((painting) => {
+    const isAni = isAniPainting(catalog, painting);
+    return {
+      localPath: join(BUNDLES_DIR, isAni ? `${painting}_res` : painting),
+      remoteSize: bundleRemoteSize(painting, isAni),
+    };
+  });
+  const totalSize = targets.reduce((s, t) => s + (t.remoteSize ?? 0), 0);
+  const sizeKnown = targets.every((t) => t.remoteSize);
   const poll = setInterval(() => {
     try {
-      const size = statSync(localPath).size;
-      job.progress = remoteSize
-        ? {
-            percent: 2 + Math.min(38, (38 * size) / remoteSize),
-            label: `拉取 bundle ${Math.min(100, Math.round((100 * size) / remoteSize))}%`,
-          }
-        : { percent: null, label: "拉取 bundle" };
+      let size = 0;
+      for (const t of targets) {
+        try {
+          size += statSync(t.localPath).size;
+        } catch { }
+      }
+      job.progress =
+        sizeKnown && totalSize
+          ? {
+              percent: 2 + Math.min(38, (38 * size) / totalSize),
+              label: `拉取 bundle ${Math.min(100, Math.round((100 * size) / totalSize))}%`,
+            }
+          : { percent: null, label: "拉取 bundle" };
     } catch {
       job.progress = { percent: null, label: "拉取 bundle" };
     }
   }, 800);
   const stopPoll = () => clearInterval(poll);
-  runStep(["scripts/pull_bundles.js", painting], PULL_TIMEOUT, push)
-    // pull_bundles 自带"本地已存在且大小一致即跳过"，无条件先跑还能顺带刷新设备索引
+  // pull_bundles 支持多 skin_id 一趟拉全（本地已存在且大小一致即跳过），烘焙逐条跑；
+  // 进度按 painting 均分切片，拉取占各切片前 40%、解包占 40-95%
+  runStep(["scripts/pull_bundles.js", ...paintings], PULL_TIMEOUT, push)
     .then(() => {
       stopPoll();
       job.phase = "extract";
-      job.progress = { percent: 40, label: "解包烘焙" };
-      return runStep(
-        ["scripts/extract.js", painting],
-        EXTRACT_TIMEOUT,
-        push,
-        (line) => {
-          const m = line.match(/^\[progress\] (\d+) (.+)$/);
-          if (m)
+      return paintings.reduce(
+        (chain, painting, i) =>
+          chain.then(() => {
             job.progress = {
-              percent: 40 + Math.round(0.55 * Number(m[1])),
-              label: m[2],
+              percent: 40 + Math.round((55 * i) / paintings.length),
+              label: `解包烘焙 ${painting}`,
             };
-        },
+            return runStep(
+              ["scripts/extract.js", painting],
+              EXTRACT_TIMEOUT,
+              push,
+              (line) => {
+                const m = line.match(/^\[progress\] (\d+) (.+)$/);
+                if (m)
+                  job.progress = {
+                    percent: 40 + Math.round(
+                      (55 * (i + Number(m[1]) / 100)) / paintings.length,
+                    ),
+                    label: m[2],
+                  };
+              },
+            );
+          }),
+        Promise.resolve(),
       );
     })
     .then(() => {
@@ -309,11 +341,14 @@ export function catalogApi() {
             }
             if (!catalog) catalog = readCatalog();
             // 白名单含双形态条目的 altPaintings（spine 侧 bundle 名，形态开关按需拉取用）
-            if (!resolveCatalogEntry(catalog, painting)) {
+            const entry = resolveCatalogEntry(catalog, painting);
+            if (!entry) {
               return json(res, 400, { error: `皮肤不在目录中: ${painting}` });
             }
             const bakedIds = new Set(scanModels(MODELS_DIR).map((m) => m.id));
-            if (bakedIds.has(painting))
+            // 双形态条目一次拉全（基底 + altPaintings，已烘焙的侧跳过），切形态不再二次提醒
+            const paintings = pullPaintings(entry, bakedIds);
+            if (!paintings.length)
               return json(res, 409, {
                 error: "该皮肤已烘焙，直接点击加载即可",
               });
@@ -322,7 +357,7 @@ export function catalogApi() {
                 error: "已有烘焙任务进行中，请稍候",
                 job,
               });
-            startJob(painting, catalog);
+            startJob(paintings, catalog);
             return json(res, 200, { ok: true, job });
           });
         }

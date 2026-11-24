@@ -149,11 +149,13 @@ async function mountSpineInner(ctx, url, variantOverride) {
     // 形态切换的换入组（App 换挂前经 stage.setEntryGroup 登记）：本挂载独占消费一次
     const pendingEntry = ctx._entryGroup;
     ctx._entryGroup = null;
-    ctx.status.value = "加载模型…";
+    // 形态切换并行加载期（_revealHold）旧模型仍在台上播换出动画，不叠"加载模型…"文字
+    if (!ctx._revealHold) ctx.status.value = "加载模型…";
     ctx.hintsCtl.destroy();
     ctx._spineCanvas = null;
     ctx._spineExprName = null;
-    ctx._holdPose = null;
+    // 换出动画并行加载期（_revealHold）旧模型的 change_out 还在播，定格窗口保持到闸门放行
+    if (!ctx._revealHold) ctx._holdPose = null;
 
     // 元数据：分区表（parts，分层预制体组装序）与骨架变体表（spineBake.js 产物）
     const meta = await fetch(url).then((r) => {
@@ -168,6 +170,8 @@ async function mountSpineInner(ctx, url, variantOverride) {
     // pixi-spine 的 ESM 在 import 时自动把解析中间件注册进 Loader 全局插件表
     //（all-3.8.es.js 尾部的 registerLoaderPlugin），此处不再手动挂载——重复注册会让
     // 同一资源跑两遍中间件，第二次 add 同名 atlas 资源时抛 "already exists" 打断加载链
+    // 加载期收集全部图集页 baseTexture：揭幕闸门等待期逐帧预上传 GPU（见闸门循环）
+    const atlasTextures = [];
     const loadVariant = async (variant, resName) => {
         const skeletonUrl = base + variant.skeleton;
         // 加载耗时埋点：含骨架 JSON 解析+全部图集页下载与解码（切换慢时对照此行定位）
@@ -178,6 +182,9 @@ async function mountSpineInner(ctx, url, variantOverride) {
             loader.load((loaderRef, resources) => {
                 const res = resources[resName];
                 if (!res?.spineData) return reject(new Error(res?.error?.message ?? "spine 资源解析失败"));
+                for (const page of res.spineAtlas?.pages ?? []) {
+                    if (page.baseTexture) atlasTextures.push(page.baseTexture);
+                }
                 resolve(new Spine(res.spineData));
             });
             loader.onError.add((err) => reject(err));
@@ -213,6 +220,8 @@ async function mountSpineInner(ctx, url, variantOverride) {
 
     let model;
     let firstStart = "";
+    // 换入组（login 单发后接 starting 循环）：单骨架分支登记，揭幕闸门放行后起播
+    let entryAnim = null;
     if (Array.isArray(meta.parts) && meta.parts.length > 1) {
         // 分层预制体：按 parts 序同时挂全部分区叠出完整人形（各分区共享坐标系原点，
         // 起播动画各取 SkeletonGraphic 的 startingAnimation）
@@ -249,11 +258,12 @@ async function mountSpineInner(ctx, url, variantOverride) {
         ctx._spineCanvas = variant.canvas ?? null;
         applySkin(model, variant);
         firstStart = startPart(model, variant);
-        // 换入组起播：login 单发后接 starting 循环（揭幕即换入动画，不再先露 normal 循环）
-        if (pendingEntry && model.spineData.findAnimation(pendingEntry)) {
-            model.state.setAnimation(0, pendingEntry, false);
-            model.state.addAnimation(0, firstStart, true, 0);
-        }
+        // 换入组登记（起播推迟到揭幕闸门放行后，见下）：login 单发后接 starting 循环，
+        // 揭幕即换入动画，不再先露 normal 循环
+        entryAnim =
+            pendingEntry && model.spineData.findAnimation(pendingEntry)
+                ? pendingEntry
+                : null;
         const overlays = expressionOverlays(model.spineData);
         if (overlays.length) {
             model.state.setAnimation(1, overlays[0], true);
@@ -261,6 +271,28 @@ async function mountSpineInner(ctx, url, variantOverride) {
         }
     }
 
+    // 形态切换的揭幕闸门（App 经 stage.holdReveal 置位）：目标形态在换出动画播放期间
+    // 并行加载，加载完成后在此等换出播完（App releaseReveal 放行）再收旧换新；
+    // 等待期旧模型照常逐帧渲染（change_out 仍在上台模型上播）
+    let texIdx = 0;
+    while (ctx._revealHold) {
+        if (stale()) {
+            model.destroy({ children: true });
+            return;
+        }
+        // 揭幕首帧的 GPU 贴图上传是单帧几十毫秒的大坑：等待期逐帧预上传一张图集页，
+        // 摊进换出窗口的加载期，login 揭幕帧平滑起播
+        const tex = atlasTextures[texIdx];
+        if (tex) app.renderer.texture.updateTexture(tex);
+        texIdx++;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    ctx._holdPose = null;
+    // 换入组起播：login 单发后接 starting 循环，收旧换新同帧揭幕即播
+    if (entryAnim) {
+        model.state.setAnimation(0, entryAnim, false);
+        model.state.addAnimation(0, firstStart, true, 0);
+    }
     // 换挂载点收旧模型与旧交互状态：必须与 destroy 同帧（L2D 的揭幕语义在此简化：
     // spine 加载即上台）。旧 L2D 模型在加载等待期仍逐帧 tick，其 beforeMotionUpdate
     // 监听器闭包读 ctx.runtime——提前置 null 会让整个 ticker 帧（含渲染）每帧被
@@ -268,7 +300,9 @@ async function mountSpineInner(ctx, url, variantOverride) {
     ctx.runtime = null;
     ctx.orch = null;
     ctx.l2dOffset = null;
-    ctx.model?.destroy();
+    // children:true 收掉分层壳（Container）下的全部分区：pixi v6 裸 destroy 只摘离
+    // 不销毁 children，各分区骨架/贴图数据会随换挂逐次泄漏（L2D 模型无 children，等价裸 destroy）
+    ctx.model?.destroy({ children: true });
     ctx.model = model;
     app.stage.addChild(model);
 

@@ -20,6 +20,8 @@ const job = ref(null)
 let pollTimer = null
 
 const online = computed(() => devices.value.filter((d) => d.state === 'device'))
+/** 双形态条目（SkinTab 条目带 alt + l2d）：一次拉全两套资源，切形态不再二次拉取 */
+const isDual = computed(() => !!(props.target?.alt && (props.target?.l2d ?? true)))
 const phaseText = computed(() =>
   job.value?.phase === 'extract' ? '正在解包烘焙…' : '正在拉取 bundle…',
 )
@@ -111,6 +113,7 @@ onBeforeUnmount(stopPoll)
       <template v-if="phase === 'confirm'">
         <h3 class="title">拉取皮肤「{{ target.label }}」？</h3>
         <p class="hint">将从设备拉取 bundle 并解包烘焙到 models/，完成后自动加载。</p>
+        <p v-if="isDual" class="hint dual">双形态皮肤会同时拉取 L2D 与 Ani 两套资源，切换形态无需再拉取。</p>
         <div v-if="!deviceReady" class="device loading">正在检测设备…</div>
         <ul v-else-if="online.length" class="device">
           <li v-for="d in online" :key="d.serial">{{ d.model || '未知型号' }}（{{ d.serial }}）</li>
@@ -198,6 +201,11 @@ onBeforeUnmount(stopPoll)
   margin: 0 0 12px;
   color: #8a8a93;
   font: 500 12px/1.5 system-ui, sans-serif;
+}
+
+.hint.dual {
+  margin-top: -8px;
+  color: #4fc08d;
 }
 
 .device {

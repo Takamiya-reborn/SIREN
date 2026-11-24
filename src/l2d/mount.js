@@ -52,7 +52,8 @@ async function mountModelInner(ctx, url) {
   // per-drawable multiply/screen 渲染补丁（调色板换色的渲染侧，装一次全局生效）
   // 差分实验开关：?nopatch=1 跳过调色板渲染补丁（排查锚点形变爆炸是否由补丁的核内改动引出）
   if (!location.search.includes("nopatch")) installColorPatch();
-  ctx.status.value = "加载模型…";
+  // 形态切换并行加载期（_revealHold）旧模型仍在台上播换出动画，不叠"加载模型…"文字
+  if (!ctx._revealHold) ctx.status.value = "加载模型…";
   // 上一次挂载可能死在标记设置与起播之间，残留标记会错切新挂载的首支新 clip
   ctx._entryHardCutClip = null;
   ctx.hintsCtl.destroy();
@@ -69,8 +70,9 @@ async function mountModelInner(ctx, url) {
   ctx._spineTransition = null;
   ctx._spineTrigger = null;
   ctx._spineExprName = null;
-  // 上一轮换出定格随挂载终结：新模型的 FinishAction→changeActionIdle 链恢复正常
-  ctx._holdPose = null;
+  // 上一轮换出定格随挂载终结：新模型的 FinishAction→changeActionIdle 链恢复正常；
+  // 换出动画并行加载期（_revealHold）旧模型的 change_out 还在播，定格窗口保持到闸门放行
+  if (!ctx._revealHold) ctx._holdPose = null;
   const model = await Live2DModel.from(url, {
     autoInteract: false,
     idleMotionGroup: "idle", // 本项目 idle 组为小写（Cubism 默认是 "Idle"）
@@ -190,8 +192,10 @@ async function mountModelInner(ctx, url) {
   // 调色板控制层（色轴参数 skin 没有时整层旁路）
   installPalette(ctx, model);
   // 平滑复位每帧落笔：先于机器叠加层的 restoreLayer 注册（同事件按注册序触发）——机器加/乘参数的底值还原保持原语义，不被缓动写入覆盖
+  // 空值跳过：下一轮挂载把 ctx.runtime 置空后本模型作为旧模型仍逐帧 tick 到这条监听
+  // （internalModel.update 每帧无条件 emit），直读空引用在渲染帧内抛 TypeError 杀整帧
   model.internalModel.on("beforeMotionUpdate", () =>
-    ctx.runtime.applySmoothReset(),
+    ctx.runtime?.applySmoothReset(),
   );
   // 曲线落笔后即快照全参数（差分 mid 列的取数点）：须挂在 applyLayer 之前，快照才是"曲线刚落笔"的值
   model.internalModel.on("afterMotionUpdate", () =>
@@ -203,6 +207,23 @@ async function mountModelInner(ctx, url) {
     model.destroy();
     return;
   }
+  // 形态切换的揭幕闸门（App 经 stage.holdReveal 置位）：目标形态在换出动画播放期间
+  // 并行装配，装配完成后在此等换出播完（App releaseReveal 放行）再起播换入组与揭幕，
+  // 换入动画揭幕瞬间起播，两段动画之间无加载空窗。等待期旧模型照常逐帧渲染
+  let texIdx = 0;
+  while (ctx._revealHold) {
+    if (stale()) {
+      model.destroy();
+      return;
+    }
+    // 揭幕首帧的 GPU 贴图上传（4096 级纹理逐张 texImage2D）是单帧几十毫秒的大坑：
+    // 等待期逐帧预上传一张摊进换出窗口的加载期，change_in 揭幕帧平滑起播
+    const tex = model.textures?.[texIdx];
+    if (tex) app.renderer.texture.updateTexture(tex.baseTexture);
+    texIdx++;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  ctx._holdPose = null;
   // 初始 idle 的 clip 名，揭幕窗口取它的转场时长用
   let entryIdle = null;
   // 入口硬切的缓存 motion 句柄，揭幕时恢复其表值转场时长（后续变体切换照常渐入）
@@ -309,10 +330,12 @@ async function mountModelInner(ctx, url) {
           ctx.fades?.transitions?.[entryIdle] ?? ctx.fades?.default ?? 0.3,
         );
         ctx._entryHardCutClip = null;
-        // 揭幕即收走旧模型：挂载期间旧模型保持可见，重置/切肤全程无黑屏空窗
+        // 揭幕即收走旧模型：挂载期间旧模型保持可见，重置/切肤全程无黑屏空窗。
+        // children:true 是给 spine 分层壳（Container）的：pixi v6 裸 destroy 只摘离不销毁
+        // children，各分区骨架/贴图数据会随形态切换逐次泄漏（L2D 模型无 children，等价裸 destroy）
         if (oldModel && !oldModel.destroyed) {
           app.stage.removeChild(oldModel);
-          oldModel.destroy();
+          oldModel.destroy({ children: true });
         }
         if (ctx.model) ctx.model.visible = true;
         ctx.status.value = "";

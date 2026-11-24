@@ -256,7 +256,12 @@ export async function bakeSpine(
   for (const v of variants) {
     if (!v.atlas) throw new Error(`变体 ${v.variant} 的 atlas 引用落空`);
     const atlasText = textAssets.get(BigInt(v.atlasPathId));
-    writeFileSync(join(outDir, v.atlas), Buffer.from(atlasText.data));
+    // 贴图是预乘 alpha（spine PMA 导出，游戏材质按 PMA 混合）；spine-unity 的 PMA 标志
+    // 在材质 shader 上，TextAsset 原文没有该行，写入后 pixi-spine 把页面标为
+    // ALPHA_MODES.PMA，上传时不再做二次预乘（否则羽化边缘发黑）。
+    const text = new TextDecoder().decode(atlasText.data)
+      .replace(/^repeat:.+$/gm, (line) => `${line}\npma: true`);
+    writeFileSync(join(outDir, v.atlas), Buffer.from(text, "utf8"));
   }
   for (const v of variants) delete v.atlasPathId;
   const textures = res.byClass("Texture2D");

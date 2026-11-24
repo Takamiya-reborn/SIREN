@@ -93,6 +93,7 @@ ani 动态皮肤使用 spine 骨架动画而非 Cubism。资源成对出现：�
 - `.skel` 是 spine 3.8 系二进制，语法以游戏 spine-unity 程序集的 SkeletonBinary.ReadSkeletonData 为准（nonessential 时头尾各多一个调试占位 int，是与官方 3.8 语法的分歧点）；`spineSkel.js` 的 `parseSkel()` 解析、`toSpine38Json()` 转换为 pixi-spine 3.8 读取器方言的 JSON（skins 数组形态、时间轴按名键控、加权顶点平铺单数组等）。美术迭代遗留的旧附件名悬挂引用按同槽位附件名集合做最长公共前缀修补，修补后仍落空的 deform 条目丢弃；
 - `spineBake.js` 的 `bakeSpine()` 消费主 bundle 与 `_res` 两个 bundle：变体表取 res 内全部 SkeletonDataAsset；分层预制体（根 GameObject 子层级按序挂多个 SkeletonGraphic，共享坐标系）落 `parts` 有序分区表，单骨架走默认变体；
 - 贴图统一翻转口径为标准 top-down PNG（`decodeAstcTexture()` flip 默认 true），pixi-spine 无 spine-unity 的内部 UV 转换；
+- 贴图是预乘 alpha（spine PMA 导出，游戏以 PMA 材质混合渲染）：spine-unity 的 PMA 标志记在材质 shader 上，`.atlas` 原文没有该行，落盘时在每个 page 的 `repeat:` 行后补写 `pma: true`，浏览器端 pixi-spine 据此按 `ALPHA_MODES.PMA` 加载（不补则上传时二次预乘，羽化边缘发黑）；
 - .skel/.atlas 的 TextAsset 必须经 `info.object.data` 取原始字节——typetree 的 m_Script 经 UTF-8 解码已毁二进制段。
 
 ani 皮肤产物与 L2D 皮肤同目录约定（见第 4 节）。
@@ -122,7 +123,7 @@ ani（spine）皮肤的产物布局：
 │                          #   startingAnimation/startingLoop/initialSkin）、分层预制体 parts
 ├── <变体>.json            # spine 3.8 JSON（pixi-spine 方言）
 ├── <变体>.skel            # 原始 .skel 字节归档
-├── <变体>.atlas           # 图集描述文本
+├── <变体>.atlas           # 图集描述文本（含烘焙补写的 pma: true 行）
 └── <atlas 页名>.png       # 贴图（top-down 行序）
 ```
 

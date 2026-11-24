@@ -33,10 +33,12 @@ watch(activeId, () => {
 const pullTarget = ref(null)
 
 /**
- * 形态切换编排（L2D↔ANI 胶囊入口）：先播换出动画（L2D 的 change_out / spine 的 change_out，
- * 播完定格在收尾姿态，引擎不回 idle），换挂前登记换入组（spine 的 login / L2D 的 change_in），
- * 挂载链在揭幕瞬间起播换入动画——换出动画在前收尾，换入动画随揭幕播放，无"弹回原样"与
- * "先露皮肤再补播动画"。两侧组名缺失/被拦都退化为直接换挂。
+ * 形态切换编排（L2D↔ANI 胶囊入口）：置揭幕闸门后换挂提前开跑，目标形态的加载与换出
+ * 动画（L2D 的 change_out / spine 的 change_out）全程并行；换出播完 releaseReveal 放行，
+ * 挂载链收旧换新并在揭幕瞬间起播换入组（spine 的 login / L2D 的 change_in）——换出动画
+ * 在前收尾，换入动画随揭幕播放，两段之间无"加载模型中"空窗。换出期间旧模型定格在收尾
+ * 姿态（_holdPose 窗口保持到闸门放行），引擎不回 idle。两侧组名缺失/被拦都退化为直接换挂
+ * （playAndWait 立即返回，闸门照常放行）。
  */
 const switching = ref(false)
 
@@ -52,14 +54,21 @@ async function setForm(next) {
   switching.value = true
   const id = activeId.value
   try {
-    await stageRef.value?.playAndWait('change_out')
-    stageRef.value?.setEntryGroup?.(next === 'ani' ? 'login' : 'change_in')
-    // 过渡播放期间用户可能已切走皮肤：丢弃本次切换，不把形态写到别的皮肤头上
-    if (activeId.value !== id) {
-      stageRef.value?.setEntryGroup?.(null)
-      return
+    stageRef.value?.holdReveal()
+    try {
+      // playAndWait 捕获换出钩子须先于挂载链清钩子（mount 置空 _spineTransition 等），
+      // 所以先取 promise 再置 activeForm 开挂；watcher 是微任务，挂载同步段消费 _entryGroup
+      // 之前 setEntryGroup 一定已登记
+      const outDone = stageRef.value?.playAndWait('change_out')
+      stageRef.value?.setEntryGroup?.(next === 'ani' ? 'login' : 'change_in')
+      activeForm.value = next
+      await outDone
+    } finally {
+      stageRef.value?.releaseReveal()
     }
-    activeForm.value = next
+    // 过渡播放期间用户可能已切走皮肤：丢弃本次切换（本挂载已被换肤挂载按序号令牌
+    // 压过，闸门放行后自行销毁），不把形态写到别的皮肤头上
+    if (activeId.value !== id) return
   } finally {
     switching.value = false
   }

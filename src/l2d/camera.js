@@ -108,7 +108,7 @@ export function createCamera(ctx) {
       zoom;
     model.scale.set(scale);
     // 回退取景没有游戏取景语义，按"画布在屏幕上的实际高度"近似换算
-    ctx.dragScale = DRAG_REF_HEIGHT / (canvasH * scale);
+    ctx.dragScale = DRAG_REF_WIDTH / (canvasH * scale);
     // 锚点优先用角色（见 pickAnchorX），并 clamp 进场景框：宽松视口（如 16:9）下场景几乎全可见，clamp 把锚点收回场景边缘内，与游戏内构图一致；竖窄视口下场景左右大幅裁切，锚点保持人物居中
     // 纵向始终取场景中心
     const centerX = scene.x + scene.width / 2;
@@ -124,7 +124,8 @@ export function createCamera(ctx) {
     }
     model.position.set(
       viewW / 2 - anchorX * scale + (ctx.userView?.offX ?? 0) * viewW,
-      viewH / 2 - (scene.y + scene.height / 2) * scale +
+      viewH / 2 -
+        (scene.y + scene.height / 2) * scale +
         (ctx.userView?.offY ?? 0) * viewH,
     );
   }

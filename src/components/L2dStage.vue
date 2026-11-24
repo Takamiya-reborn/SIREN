@@ -196,7 +196,8 @@ onBeforeUnmount(() => {
   rippleCtl?.destroy()
   rippleCtl = null
   ctx.hintsCtl?.destroy()
-  ctx.model?.destroy()
+  // children:true 收掉 spine 分层壳的全部分区（pixi v6 裸 destroy 只摘离不销毁 children）
+  ctx.model?.destroy({ children: true })
   canvasHost.value.__pixiApp = null
   app?.destroy(true)
   ctx.app = null
@@ -219,6 +220,15 @@ defineExpose({
       : ctx.actions.playTransition(group),
   setEntryGroup: (group) => {
     ctx._entryGroup = group ?? null
+  },
+  /** 形态切换并行加载的揭幕闸门（消费方见 mount.js/spineMount.js）：置位后挂载链装配
+   * 完成不立即揭幕（也不叠加载文字），等 releaseReveal 放行再收旧换新并起播换入组。
+   * App 侧编排在换出动画起播前置位、播完放行，换出与目标形态加载全程并行 */
+  holdReveal: () => {
+    ctx._revealHold = true
+  },
+  releaseReveal: () => {
+    ctx._revealHold = false
   },
 })
 </script>

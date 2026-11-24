@@ -3,7 +3,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 /**
  * 自绘滚动条：隐藏原生滚动条（叠加滚动条模式下 ::-webkit-scrollbar 会被浏览器忽略），
- * 按滚动位置画半透明滑块。滑块自动隐藏：滚动或悬停时出现，停止后延时淡出，拖拽期间保持。
+ * 按滚动位置画半透明滑块。滑块自动隐藏：滚动或悬停时出现，悬停期间保持常显，
+ * 移出即隐；纯滚动唤出时停止后延时淡出，拖拽期间保持。
  * 根节点 flex:1 占满父容器的剩余高度（父容器需为 flex 列布局），
  * 滑轨只覆盖本组件区域——面板里标题/搜索框等固定区不参与滚动与滑轨。
  * 滑轨距容器右缘 inset px，用于避开骑在边缘的开关把手。滑块可拖拽，滑轨空白处点击跳转。
@@ -28,9 +29,11 @@ let trackH = 0
 let ro = null
 let drag = null
 let hideTimer = null
+let hovering = false
 
 function reveal() {
   active.value = true
+  if (hovering) return // 悬停期间保持常显，不排淡出
   clearTimeout(hideTimer)
   hideTimer = setTimeout(() => (active.value = false), HIDE_DELAY)
 }
@@ -71,10 +74,13 @@ function onThumbUp() {
 }
 
 function onEnter() {
-  reveal()
+  hovering = true
+  active.value = true
+  clearTimeout(hideTimer)
 }
 
 function onLeave() {
+  hovering = false
   if (!drag) {
     clearTimeout(hideTimer)
     active.value = false
