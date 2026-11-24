@@ -9,6 +9,6 @@
  * 门控一律查节点而非实时参数：实时值会被逐帧曲线、眨眼/呼吸等姿态系统扰动（如点击瞬间正逢眨眼，ParamEyeLOpen 离 1 很远，按实时值比对会误拒合法分支），节点只在转移时变化。
  * 文件划分：runtime.js 状态机运行时（loadInteraction + InteractionRuntime）、hitTest.js 网格级命中检测（纯几何，零依赖）、hints.js 交互点可视化提示（pixi 调试覆盖层）。
  */
-export { loadInteraction, InteractionRuntime } from './runtime.js'
-export { meshHitTest, boundaryLoops, boundaryEdges } from './hitTest.js'
-export { createInteractionHints } from './hints.js'
+export { loadInteraction, InteractionRuntime } from "./runtime.js";
+export { meshHitTest, boundaryLoops, boundaryEdges } from "./hitTest.js";
+export { createInteractionHints } from "./hints.js";

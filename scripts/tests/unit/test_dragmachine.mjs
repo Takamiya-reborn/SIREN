@@ -3,6 +3,7 @@
 // - 状态机：type 1（按压邻域累计）/ 2（常规点击，含 down 配置）/ 3（长按播表 + slot11 回绕松开）/ 6（连点列表）/ 8（充能档位）/ 9（点参触发）/ 12（扩展动作规则过滤门）、relation 101/103、冷却塌缩、interactable、pressLock 门控矩阵、additive 两阶段还原、localStorage 持久化、'idle' 摆位机先切变体后播、起播清滞留播放中、resetAll 契约。
 // - 联动层：kind1 相对累计 / kind2 绝对赋值 / range 钳制 / 连点下标复位 / apply 区间换挡 + idle_enable 名单 / type3 变体号匹配 / PLAY 通知 / DRAG_CLICK(2) 真路径（click_cd 名单自封冷却、type 2 监听按被点分区赋值、重复 idle 豁免的点击不发通知）。
 // - 触发类型：type 5 idle 常量跟随 / type 10 动作链闩锁 / type 11 点击区间 / type 12 扩展门区间裁决。
+// - 小游戏：type 13 参数从动轮（外参差分步进 / 窗内净差合并 / 邻域触发闩锁与复位 / 无 num 形态 / 播放中冻结）/ type 15/16 井字棋（落子 / 1s 限频 / AI 应手显形延迟 / 玩家胜·AI 胜·满盘平结算 / 终局锁盘 / resetAll 清盘）。
 import {
   DragMachine,
   DragOrchestrator,
@@ -122,11 +123,22 @@ section("状态机");
       id: 10,
       draw_able_name: "W",
       parameter: "p10",
-      action_trigger: { type: 15 },
+      action_trigger: { type: 14 },
     },
     orch,
   );
-  check("type15 未实现 interactable=null", mUnknown.interactable() === null);
+  check("type14 未实现 interactable=null", mUnknown.interactable() === null);
+  // type 15 下棋格是点击型：本机无 action 无占用判定，恒可点（占格/限频的拦截在控制层 xiaqiClick）
+  const mCell = new DragMachine(
+    {
+      id: 11,
+      draw_able_name: "V",
+      parameter: "p11",
+      action_trigger: { type: 15, index: 1 },
+    },
+    orch,
+  );
+  check("type15 格 interactable=true", mCell.interactable() === true);
 
   // ============ wuzang_3 引入的类型：3 长按播表 / 4 双轴邻域 / 8 充能 / 9 点参 / relation ============
   const params2 = { c1: 0, relx: 0 };
@@ -1340,6 +1352,297 @@ section("触发类型 1/5/10/11/12");
   m11.onUp({ x: 0, y: 0 });
   drive2(7);
   check("type11 他参入区间触发", played2.includes("range_out"));
+}
+
+// ============ 小游戏：type 13 参数从动轮 / type 15/16 井字棋 ============
+section("小游戏");
+{
+  // --- type 13：外参差分步进 + 邻域触发闩锁 ---
+  const params13 = { own13: 0, ext13: 0, ttb: 0, tta: 0 };
+  const fakeModel13 = {
+    internalModel: {
+      coreModel: {
+        getParameterIndex: (p) => Object.keys(params13).indexOf(p),
+        getParameterValueByIndex: (i) => Object.values(params13)[i],
+        setParameterValueByIndex: (i, v) => {
+          params13[Object.keys(params13)[i]] = v;
+        },
+      },
+    },
+  };
+  const played13 = [];
+  const orch13 = new DragOrchestrator(
+    fakeModel13,
+    {
+      skin_id: "test13",
+      idle_index: { 0: "idle" },
+      entries: [
+        // qiye_10 形态：num=1 rate=0.4 action=touch_idle4（本体值进 num 邻域播动作）
+        {
+          id: 30,
+          draw_able_name: "TouchDrag4",
+          parameter: "own13",
+          mode: 1,
+          revert: -1,
+          smooth: 100,
+          range: [0, 1],
+          action_trigger: {
+            type: 13,
+            parameter: "ext13",
+            rate: 0.4,
+            num: 1,
+            action: "touch_idle4",
+          },
+          limit_time: 4,
+        },
+        // beilaosenlin_2 形态：无 num 无 action，纯差分跟随（TTB 以 rate× 跟随 TTA）
+        {
+          id: 31,
+          draw_able_name: "TouchDrag11",
+          parameter: "ttb",
+          mode: 1,
+          revert: -1,
+          smooth: 500,
+          range: [0, 1],
+          action_trigger: { type: 13, parameter: "tta", rate: 0.4 },
+          limit_time: 4,
+        },
+      ],
+    },
+    (clip) => {
+      played13.push(clip);
+      return true;
+    },
+  );
+  const { 30: m13, 31: m13b } = machinesById(orch13);
+  let now13 = performance.now() / 1000;
+  // dt=1/30：moveCheckStep 每帧递减 1（dt×30 折算），恰 10 帧一采样窗
+  const drive13 = (frames, playing = false) => {
+    for (let i = 0; i < frames; i++) {
+      now13 += 1 / 30;
+      for (const m of orch13.machines)
+        m.step(1 / 30, now13, playing, playing ? "busy" : "");
+    }
+  };
+
+  params13.ext13 = 0.5;
+  params13.tta = 0.25;
+  drive13(10);
+  check(
+    "type13 首采样建基线不步进",
+    m13.parameterTargetValue === 0 && m13.parameterMove === 0.5,
+  );
+  // 外参变化一次 → 差分×rate 步进（0.5→0.7 差 0.2 ×0.4 = 0.08）
+  params13.ext13 = 0.7;
+  drive13(10);
+  near("type13 外参差分步进", m13.parameterTargetValue, 0.08);
+  // 一个采样窗内两次变化合并为一次：净差 0.3-0.7=-0.4 → -0.16，range 钳回 0
+  params13.ext13 = 0.9;
+  drive13(5);
+  params13.ext13 = 0.3;
+  drive13(5);
+  check("type13 窗内多变按净差合并", m13.parameterTargetValue === 0);
+  // beilaosenlin_2 形态：仅差分跟随（0.25→0.75 差 0.5×0.4 = 0.2），邻域分支恒假不闩锁
+  params13.tta = 0.75;
+  drive13(10);
+  near("type13 无num形态差分跟随", m13b.parameterTargetValue, 0.2);
+  check("type13 无num形态不闩锁", m13b.parameterMoveTrigger === false);
+  // 邻域触发：本体值进 num±0.1（含等号）→ 播 action + 闩锁，冷却闸随后冻结整支
+  m13.parameterValue = 1;
+  drive13(1);
+  check(
+    "type13 邻域触发播 action+闩锁",
+    played13.includes("touch_idle4") && m13.parameterMoveTrigger === true,
+  );
+  check("type13 触发后进冷却", m13.nextTriggerTime === 4);
+  const latched = played13.filter((c) => c === "touch_idle4").length;
+  drive13(5);
+  check(
+    "type13 冷却期内闩锁滞留",
+    m13.parameterMoveTrigger === true &&
+      played13.filter((c) => c === "touch_idle4").length === latched,
+  );
+  m13.nextTriggerTime = 0;
+  drive13(1);
+  check(
+    "type13 冷却过后闩锁复位回 startValue",
+    m13.parameterValue === 0 &&
+      m13.parameterTargetValue === 0 &&
+      m13.parameterMoveTrigger === false,
+  );
+  // 播放中整支冻结：不触发、不采样、不闩锁
+  m13.parameterValue = 1;
+  for (let i = 0; i < 10; i++) {
+    now13 += 1 / 30;
+    m13.step(1 / 30, now13, true, "busy");
+  }
+  check(
+    "type13 播放中整支冻结",
+    played13.filter((c) => c === "touch_idle4").length === latched &&
+      m13.parameterMoveTrigger === false,
+  );
+
+  // --- type 15/16 井字棋：落子 / 限频 / AI 应手 / 终局结算 / 复位 ---
+  const paramsX = {};
+  for (let i = 1; i <= 9; i++) paramsX[`a${i}`] = 0;
+  const fakeModelX = {
+    internalModel: {
+      coreModel: {
+        getParameterIndex: (p) =>
+          p in paramsX ? Object.keys(paramsX).indexOf(p) : -1,
+        getParameterValueByIndex: (i) => Object.values(paramsX)[i],
+        setParameterValueByIndex: (i, v) => {
+          paramsX[Object.keys(paramsX)[i]] = v;
+        },
+      },
+    },
+  };
+  const playedX = [];
+  const entriesX = [];
+  for (let i = 1; i <= 9; i++) {
+    // 照 suweiaitongmeng_3 结构：TouchDrag14..22 / a1..a9 / index 1..9 / range [-1,1] / revert=-1
+    entriesX.push({
+      id: 40 + i,
+      draw_able_name: `TouchDrag${13 + i}`,
+      parameter: `a${i}`,
+      mode: 1,
+      revert: -1,
+      limit_time: 1,
+      ignore_action: 1,
+      range: [-1, 1],
+      action_trigger: { index: i, type: 15 },
+    });
+  }
+  entriesX.push({
+    id: 52,
+    draw_able_name: "TouchDrag32",
+    parameter: "",
+    action_trigger: { type: 16, win: 1, action: "touch_idle6" },
+  });
+  entriesX.push({
+    id: 53,
+    draw_able_name: "TouchDrag33",
+    parameter: "",
+    action_trigger: { type: 16, win: 0, action: "touch_idle9" },
+  });
+  const orchX = new DragOrchestrator(
+    fakeModelX,
+    { skin_id: "testX", idle_index: { 0: "idle" }, entries: entriesX },
+    (clip) => {
+      playedX.push(clip);
+      return true;
+    },
+  );
+  const cells = orchX.xiaqiCells();
+  check("九宫格 = 全部 type15 机", cells.length === 9);
+  const cellAt = (i) => cells.find((c) => c.actionTrigger.index === i);
+  let nowX = performance.now() / 1000;
+  const driveX = (frames) => {
+    for (let i = 0; i < frames; i++) {
+      nowX += 1 / 60;
+      for (const m of orchX.machines)
+        m.step(1 / 60, nowX, orchX.isPlaying, orchX.playActionName);
+    }
+  };
+  const clickCell = (c) => {
+    nowX = performance.now() / 1000; // 对齐真实钟（onDown/onUp 内 performance.now）
+    c.onDown({ x: 0, y: 0 }, false);
+    driveX(2);
+    c.onUp({ x: 0, y: 0 });
+    driveX(7); // 过 0.1s 确认窗
+  };
+  const flushX = () => new Promise((r) => setTimeout(r, 0));
+
+  // AI 应手随机固定取第一个空格（Math.random=0），棋谱可复现：1p/2a → 3p/4a → 5p/6a → 7p/8a → 9p 成对角线 1-5-9
+  const origRandom = Math.random;
+  Math.random = () => 0;
+
+  clickCell(cellAt(1));
+  check("玩家落子 target=1", cellAt(1).parameterTargetValue === 1);
+  check("AI 应手 target 立即入账", cellAt(2).parameterTargetValue === -1);
+  check("AI 子显形延迟 0.2s 内不显形", cellAt(2).parameterValue === 0);
+  driveX(15);
+  check("AI 子延迟后显形", cellAt(2).parameterValue === -1);
+  check(
+    "HUD 下棋组读数（轮次/结果）",
+    orchX.hudInfo().xiaqi.turn === "player" &&
+      orchX.hudInfo().xiaqi.result == null,
+  );
+
+  // 1s 限频：紧接的第二手被吞（无效点击同样消耗窗口）
+  clickCell(cellAt(3));
+  check("限频窗口内点击被吞", cellAt(3).parameterTargetValue === 0);
+  check(
+    "限频内 AI 不应手",
+    cells.filter((c) => c.parameterTargetValue === -1).length === 1,
+  );
+  orchX.xiaqiLimitTime -= 2; // 白盒拨回限频戳，等效窗口过期
+  clickCell(cellAt(3));
+  check("限频外正常落子", cellAt(3).parameterTargetValue === 1);
+  check("AI 第二手", cellAt(4).parameterTargetValue === -1);
+  for (const i of [5, 7, 9]) {
+    orchX.xiaqiLimitTime -= 2;
+    clickCell(cellAt(i));
+  }
+  // AI 恒取第一空格的交错棋谱下，第 4 手 a7 即构成 3-5-7 玩家胜（终局检查在 AI 应手前排到）
+  check(
+    "玩家对角线 3-5-7 成线",
+    [3, 5, 7].every((i) => cellAt(i).parameterTargetValue === 1),
+  );
+  check(
+    "终局手后 AI 不应手",
+    cells.filter((c) => c.parameterTargetValue === -1).length === 3,
+  );
+  check("终局 0.5s 内 result 未写", orchX.xiaqiResult == null);
+  driveX(20); // 0.33s：延迟账在编排器 step 消费，单机步进不写账
+  check("编排器 step 前延迟不写账", orchX.xiaqiResult == null);
+  for (let i = 0; i < 18; i++) orchX.step(1 / 30); // 0.6s > 0.5s
+  check("终局 0.5s 后写 result=true", orchX.xiaqiResult === true);
+  check("win=1 结果机播 touch_idle6", playedX.includes("touch_idle6"));
+  await flushX();
+  check("播出成功清 result", orchX.xiaqiResult == null);
+
+  // AI 胜结算（白盒写 result：AI 随机成线是概率棋谱，结算机 win 匹配/清账语义单独验）
+  orchX.xiaqiResult = false;
+  orchX.step(1 / 60);
+  check("win=0 结果机播 touch_idle9", playedX.includes("touch_idle9"));
+  await flushX();
+  check("AI 胜结算后清 result", orchX.xiaqiResult == null);
+
+  // 终局后点击：计数关系锁盘不落子，终局检查重写 result（无显式 game-over 态的游戏语义）
+  orchX.xiaqiLimitTime -= 2;
+  clickCell(cellAt(3)); // a3 已是 AI 子，占格点击
+  check(
+    "终局后棋盘不被改变",
+    [3, 5, 7].every((i) => cellAt(i).parameterTargetValue === 1),
+  );
+  for (let i = 0; i < 18; i++) orchX.step(1 / 30);
+  check("终局后 result 重写", orchX.xiaqiResult === true);
+
+  // resetAll 清盘与下棋局
+  orchX.resetAll();
+  check(
+    "resetAll 清盘",
+    cells.every((c) => c.parameterTargetValue === 0 && c.parameterValue === 0),
+  );
+  check(
+    "resetAll 清下棋局",
+    orchX.xiaqiResult == null &&
+      orchX.xiaqiResultDelay == null &&
+      orchX.xiaqiLimitTime == null,
+  );
+
+  // 满盘平局：预置 8 子无连线（玩家 2,4,7,9 / AI 1,3,6,8），最后一手 a5 → 满盘 win=true
+  for (const i of [2, 4, 7, 9]) cellAt(i).parameterTargetValue = 1;
+  for (const i of [1, 3, 6, 8]) cellAt(i).parameterTargetValue = -1;
+  orchX.xiaqiLimitTime = null;
+  clickCell(cellAt(5));
+  check("满盘最后一手落子", cellAt(5).parameterTargetValue === 1);
+  for (let i = 0; i < 18; i++) orchX.step(1 / 30);
+  check("满盘平局按 win=true 结算", orchX.xiaqiResult === true);
+  await flushX();
+
+  Math.random = origRandom;
 }
 
 finish();

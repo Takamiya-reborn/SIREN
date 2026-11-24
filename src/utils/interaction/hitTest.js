@@ -9,14 +9,14 @@
 
 /** 点是否在三角形内（含边界）；退化（零面积）三角形恒返回 false */
 function pointInTriangle(px, py, ax, ay, bx, by, cx, cy) {
-  const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-  if (area === 0) return false
-  const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by)
-  const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy)
-  const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay)
-  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0
-  const hasPos = d1 > 0 || d2 > 0 || d3 > 0
-  return !(hasNeg && hasPos)
+  const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+  if (area === 0) return false;
+  const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+  const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+  const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNeg && hasPos);
 }
 
 /**
@@ -26,48 +26,52 @@ function pointInTriangle(px, py, ax, ay, bx, by, cx, cy) {
  * @returns {string[]} 命中分区名，未命中为空数组
  */
 export function meshHitTest(model, x, y) {
-  const internal = model.internalModel
-  const core = internal.coreModel
-  const areas = internal.hitAreas ?? {}
-  const point = { x, y }
-  model.toModelPosition(point, point)
-  const hits = []
+  const internal = model.internalModel;
+  const core = internal.coreModel;
+  const areas = internal.hitAreas ?? {};
+  const point = { x, y };
+  model.toModelPosition(point, point);
+  const hits = [];
   for (const [name, area] of Object.entries(areas)) {
-    const index = area.index
-    if (index === undefined || index < 0) continue
-    const positions = internal.getDrawableVertices(index)
-    const indices = core.getDrawableVertexIndices(index)
-    if (!positions || !indices || !indices.length) continue
-    let hit = false
+    const index = area.index;
+    if (index === undefined || index < 0) continue;
+    const positions = internal.getDrawableVertices(index);
+    const indices = core.getDrawableVertexIndices(index);
+    if (!positions || !indices || !indices.length) continue;
+    let hit = false;
     for (let t = 0; t < indices.length && !hit; t += 3) {
-      const a = indices[t] * 2
-      const b = indices[t + 1] * 2
-      const c = indices[t + 2] * 2
+      const a = indices[t] * 2;
+      const b = indices[t + 1] * 2;
+      const c = indices[t + 2] * 2;
       hit = pointInTriangle(
-        point.x, point.y,
-        positions[a], positions[a + 1],
-        positions[b], positions[b + 1],
-        positions[c], positions[c + 1],
-      )
+        point.x,
+        point.y,
+        positions[a],
+        positions[a + 1],
+        positions[b],
+        positions[b + 1],
+        positions[c],
+        positions[c + 1],
+      );
     }
-    if (hit) hits.push({ name, order: core.getDrawableRenderOrders()[index] })
+    if (hit) hits.push({ name, order: core.getDrawableRenderOrders()[index] });
   }
-  hits.sort((p, q) => q.order - p.order)
-  return hits.map((h) => h.name)
+  hits.sort((p, q) => q.order - p.order);
+  return hits.map((h) => h.name);
 }
 
 /** 统计每条无向边被多少个三角形使用，key = "小顶点_大顶点" */
 function edgeUseCounts(indices) {
-  const edgeCount = new Map()
-  const key = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`)
+  const edgeCount = new Map();
+  const key = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
   for (let t = 0; t < indices.length; t += 3) {
-    const v = [indices[t], indices[t + 1], indices[t + 2]]
+    const v = [indices[t], indices[t + 1], indices[t + 2]];
     for (let e = 0; e < 3; e++) {
-      const k = key(v[e], v[(e + 1) % 3])
-      edgeCount.set(k, (edgeCount.get(k) ?? 0) + 1)
+      const k = key(v[e], v[(e + 1) % 3]);
+      edgeCount.set(k, (edgeCount.get(k) ?? 0) + 1);
     }
   }
-  return edgeCount
+  return edgeCount;
 }
 
 /**
@@ -75,11 +79,11 @@ function edgeUseCounts(indices) {
  * @returns {number[][]} [顶点a, 顶点b] 下标对
  */
 export function boundaryEdges(indices) {
-  const edges = []
+  const edges = [];
   for (const [k, count] of edgeUseCounts(indices)) {
-    if (count === 1) edges.push(k.split('_').map(Number))
+    if (count === 1) edges.push(k.split("_").map(Number));
   }
-  return edges
+  return edges;
 }
 
 /**
@@ -89,37 +93,38 @@ export function boundaryEdges(indices) {
  * @returns {number[][] | null} 环 = 顶点下标序列（首尾相接）
  */
 export function boundaryLoops(indices) {
-  const edgeCount = edgeUseCounts(indices)
-  const adjacency = new Map()
+  const edgeCount = edgeUseCounts(indices);
+  const adjacency = new Map();
   for (const k of edgeCount.keys()) {
-    if (edgeCount.get(k) !== 1) continue
-    const [a, b] = k.split('_').map(Number)
-    if (!adjacency.has(a)) adjacency.set(a, [])
-    if (!adjacency.has(b)) adjacency.set(b, [])
-    adjacency.get(a).push(b)
-    adjacency.get(b).push(a)
+    if (edgeCount.get(k) !== 1) continue;
+    const [a, b] = k.split("_").map(Number);
+    if (!adjacency.has(a)) adjacency.set(a, []);
+    if (!adjacency.has(b)) adjacency.set(b, []);
+    adjacency.get(a).push(b);
+    adjacency.get(b).push(a);
   }
   for (const neighbors of adjacency.values()) {
-    if (neighbors.length > 2) return null
+    if (neighbors.length > 2) return null;
   }
-  const used = new Set()
-  const loops = []
+  const used = new Set();
+  const loops = [];
   for (const [start] of adjacency) {
-    if (used.has(start)) continue
-    const loop = [start]
-    used.add(start)
-    let prev = start
-    let cur = adjacency.get(start)[0]
+    if (used.has(start)) continue;
+    const loop = [start];
+    used.add(start);
+    let prev = start;
+    let cur = adjacency.get(start)[0];
     while (cur !== start) {
-      loop.push(cur)
-      used.add(cur)
-      const next = adjacency.get(cur).find((n) => n !== prev && !used.has(n)) ??
-        adjacency.get(cur).find((n) => n !== prev)
-      if (next === undefined) break
-      prev = cur
-      cur = next
+      loop.push(cur);
+      used.add(cur);
+      const next =
+        adjacency.get(cur).find((n) => n !== prev && !used.has(n)) ??
+        adjacency.get(cur).find((n) => n !== prev);
+      if (next === undefined) break;
+      prev = cur;
+      cur = next;
     }
-    loops.push(loop)
+    loops.push(loop);
   }
-  return loops
+  return loops;
 }

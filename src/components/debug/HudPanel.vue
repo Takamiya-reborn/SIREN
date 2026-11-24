@@ -12,6 +12,8 @@ const DEFAULT_OPEN = {
   params: false,
   relations: false,
   gates: false,
+  xiaqi: false,
+  move13: false,
   hints: false,
   palette: true,
   scale: true,
@@ -117,6 +119,16 @@ function ringText(gate, rings) {
   if (!r) return '环:无读数'
   if (r.why) return '环:' + r.why
   return `环:画 a=${r.a.toFixed(2)} @(${Math.round(r.x)},${Math.round(r.y)})`
+}
+
+// 下棋九宫格（hud.machine.xiaqi）：格子值 0=空 / +1=玩家子 / -1=AI 子，按 actionTrigger.index 1..9 排格
+function xiaqiCell(x, i) {
+  const c = x.cells.find(([idx]) => idx === i)
+  return c ? (c[1] > 0 ? '我' : c[1] < 0 ? 'AI' : '·') : '·'
+}
+function xiaqiCls(x, i) {
+  const c = x.cells.find(([idx]) => idx === i)
+  return c ? (c[1] > 0 ? 'me' : c[1] < 0 ? 'ai' : '') : ''
 }
 
 // 分组开合状态与持久化在文件顶部普通 <script> 的模块级作用域
@@ -425,6 +437,47 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
           </div>
         </div>
       </template>
+
+      <!-- 下棋：九宫格现值 + 轮次/结果元信息（suweiaitongmeng_3；限频剩余/延迟暂存是排查点击无响应的元信息） -->
+      <div v-if="hud.machine.xiaqi" class="group" :class="{ open: open.xiaqi }">
+        <button class="group-head" type="button" @click="toggleGroup('xiaqi')">
+          <ChevronRight class="tri" :class="{ open: open.xiaqi }" :size="12" />下棋
+          <span v-if="!open.xiaqi" class="dim">
+            轮:{{ hud.machine.xiaqi.turn }} p{{ hud.machine.xiaqi.p }}/a{{ hud.machine.xiaqi.a }}{{
+              hud.machine.xiaqi.result !=
+                null ? (hud.machine.xiaqi.result ? ' 胜' : ' 负') : '' }}
+          </span>
+        </button>
+        <div class="group-body">
+          <div class="xiaqi-grid">
+            <span v-for="i in 9" :key="'x' + i" class="xiaqi-cell" :class="xiaqiCls(hud.machine.xiaqi, i)">
+              {{ xiaqiCell(hud.machine.xiaqi, i) }}
+            </span>
+          </div>
+          <span class="debug-pair">轮:{{ hud.machine.xiaqi.turn }} p{{ hud.machine.xiaqi.p }}/a{{ hud.machine.xiaqi.a
+          }}</span>
+          <span v-if="hud.machine.xiaqi.result != null" class="debug-pair" :class="{ warn: !hud.machine.xiaqi.result }">
+            {{ hud.machine.xiaqi.result ? '胜/平' : '负' }}
+          </span>
+          <span v-if="hud.machine.xiaqi.limit > 0" class="debug-pair dim">限频{{ hud.machine.xiaqi.limit.toFixed(2)
+          }}s</span>
+          <span v-if="hud.machine.xiaqi.delayPending" class="debug-pair dim">终局延迟中</span>
+        </div>
+      </div>
+
+      <!-- 从动轮：type 13 外参采样基线/本体目标值/邻域闩锁（qiye_10 拖 A 部位 B 跟随） -->
+      <div v-if="hud.machine.move13?.length" class="group" :class="{ open: open.move13 }">
+        <button class="group-head" type="button" @click="toggleGroup('move13')">
+          <ChevronRight class="tri" :class="{ open: open.move13 }" :size="12" />从动轮
+          <span v-if="!open.move13" class="dim">{{ hud.machine.move13.length }} 台</span>
+        </button>
+        <div class="group-body">
+          <span v-for="([k, s], i) in hud.machine.move13" :key="'mv' + i" class="debug-pair"
+            :class="{ warn: s.latched }">
+            {{ k }}:外{{ s.ext == null ? '—' : s.ext.toFixed(2) }} 目{{ s.target.toFixed(2) }}{{ s.latched ? ' 闩' : '' }}
+          </span>
+        </div>
+      </div>
 
       <!-- 交互点：提示层逐分区读数（点 / 框无点 + 原因 / 被挡 / 出画 / 网格隐藏），bad = 入画却没点/被挡，门控排查重点 -->
       <div v-if="hud.dots?.length" class="group" :class="{ open: open.hints }">
@@ -817,6 +870,7 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
    Chromium 121+ 只要 scrollbar-width/color 非 auto 就整个忽略 ::-webkit-scrollbar，
    回落成系统 Fluent 悬浮滑块（浮在面板边缘上的"悬空"一条） */
 @supports not selector(::-webkit-scrollbar) {
+
   .debug-stack,
   .debug-panel,
   .param-list {
@@ -924,5 +978,30 @@ const emit = defineEmits(['toggle-hints', 'toggle-debug', 'toggle-ripple', 'togg
 .gate-band.hit {
   background: rgba(159, 217, 189, 0.28);
   color: #dff5ea;
+}
+
+/* 下棋九宫格：3×3 等宽格，玩家子/AI 子分色 */
+.xiaqi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  gap: 2px;
+}
+
+.xiaqi-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.xiaqi-cell.me {
+  color: #9fd9bd;
+}
+
+.xiaqi-cell.ai {
+  color: #e8b06f;
 }
 </style>

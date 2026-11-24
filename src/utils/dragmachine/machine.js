@@ -13,6 +13,8 @@
  * | extendActionFlag | type12 handler 置真（一次性） | reset |
  * | animationPlayApply | type10 handler 闩锁（state 命中触发后置真）；state 离开清 | reset |
  * | offsetDragX/Y/TargetX/Y | onMove 累加；step 每 tick 落 target（游戏 updateDrag）；commitDragBase 落账；updatePartsSnap 吸附覆盖；step(checkReset)/onIdleChanged/loadSaved/reset 回 startValue | 各自路径 + reset |
+ * | parameterMoveTrigger/moveCheckStep/parameterMove/lastParameterMove | type 13 handler 闩锁/采样分频/采样基线 | step handler + reset |
+ * | delayTargetTime | setTargetValueDelay 置；step 先减后判归零 | step + reset |
  * | relations[].value/velocity/enable | updateRelations 每帧 | reset |
  * 按压锁 machineAble 属主在编排器（orchestrator.pressLock），本文件禁止直改。
  */
@@ -153,6 +155,13 @@ export class DragMachine {
     this.actionListIndex = 1;
     // type 3/4 的按压累计计时（游戏 triggerActionTime：startDrag 归零）
     this.triggerActionTime = 0;
+    // type 13 参数从动轮：邻域命中闩锁 / 采样分频（10 帧折算成 30Hz 秒累计）/ 外参采样基线
+    this.parameterMoveTrigger = false;
+    this.moveCheckStep = null;
+    this.parameterMove = null;
+    this.lastParameterMove = null;
+    // 下棋 AI 落子延迟（游戏 delayTargetTime）：目标已入账，参数平滑冻结到归零
+    this.delayTargetTime = null;
     this.warned = false;
   }
 
@@ -432,7 +441,8 @@ export class DragMachine {
       (atDown.type === 2 ||
         atDown.type === 6 ||
         atDown.type === 9 ||
-        atDown.type === 11) &&
+        atDown.type === 11 ||
+        atDown.type === 15) &&
       !atDown.down
     ) {
       this.orch.pressLock(`按下 ${this.drawAbleName}`, true);
@@ -480,9 +490,13 @@ export class DragMachine {
     const dy = Math.abs(pos.y - this._downPos.y) < CLICK_RADIUS;
     const quick = now - this._downTime < CLICK_TIME;
     const at = this.actionTrigger;
-    // 走 checkClickAction 点击判定的类型（2 点击 / 6 连点 / 9 点参 / 11 点区间）；其余类型松手只收尾（游戏里它们的 updateTrigger 分支不调 checkClickAction）
+    // 走 checkClickAction 点击判定的类型（2 点击 / 6 连点 / 9 点参 / 11 点区间 / 15 下棋格，DD:1249 同调 checkClickAction）；其余类型松手只收尾
     const clickJudged =
-      at?.type === 2 || at?.type === 6 || at?.type === 9 || at?.type === 11;
+      at?.type === 2 ||
+      at?.type === 6 ||
+      at?.type === 9 ||
+      at?.type === 11 ||
+      at?.type === 15;
     // 反应动作播放中点击不触发；例外是 focus=1 且播的正是本机动作（游戏 checkClickAction：未播放恒可点，播放中仅上述例外）
     const clickAllowed = this.orch.isPlaying
       ? at?.focus === 1 && this.orch.playActionName === at.action
@@ -576,6 +590,12 @@ export class DragMachine {
     this.parameterValue = v;
   }
 
+  /** 下棋 AI 应手（游戏 setTargetValueDelay DD:579）：目标立即入账（终局判定按 target 数子立刻可见），参数平滑冻结 delay 秒——显形延迟由 step 的 delayTargetTime 闸实现 */
+  setTargetValueDelay(v, delay) {
+    this.setTargetValue(v);
+    this.delayTargetTime = delay;
+  }
+
   /** 每帧步进（游戏 stepParameter 的 updateParameterValue + checkReset + 触发调度） */
   step(dt, now, playing, playActionName) {
     this.l2dIsPlaying = playing;
@@ -604,7 +624,7 @@ export class DragMachine {
         this.actionTrigger.type !== 6 &&
         this.actionTrigger.type !== 9 &&
         this.actionTrigger.type !== 11 &&
-        // 15 下棋：点击型，入口在 applyClickTrigger（orchestrator.xiaqiClick 占位）——无 step 处理器是设计使然，不告警
+        // 15 下棋：点击型，入口在 applyClickTrigger（棋局控制在 orchestrator.xiaqiClick）——无 step 处理器是设计使然，不告警
         this.actionTrigger.type !== 15
       ) {
         this.warned = true;
@@ -628,8 +648,15 @@ export class DragMachine {
       if (this.offsetY) this.setTargetValue(this.fixTarget(this.offsetDragY));
       else this.setTargetValue(this.fixTarget(this.offsetDragX));
     }
+    // 落子延迟闸（游戏 updateParameterValue DD:804-813）：delayTargetTime 期间冻结参数平滑——先减后判，到期当帧恢复平滑；回弹/拖拽落 target/联动照常
+    let delayFrozen = false;
+    if (this.delayTargetTime != null) {
+      this.delayTargetTime -= dt;
+      if (this.delayTargetTime <= 0) this.delayTargetTime = null;
+      else delayFrozen = true;
+    }
     // 平滑趋近目标（游戏 updateParameterValue + Live2DExtend.CustomSmoothValue）：进度按 SMOOTH_RATE×dt 推进，复刻 fixedDeltaTime×30Hz 的 1.67× 时长拉伸
-    if (this.parameterValue !== this.parameterTargetValue) {
+    if (!delayFrozen && this.parameterValue !== this.parameterTargetValue) {
       if (
         Math.abs(this.parameterValue - this.parameterTargetValue) < VALUE_EPS
       ) {
@@ -726,11 +753,18 @@ export class DragMachine {
     if (at.type === 1 || at.type === 3 || at.type === 4 || at.type === 8) {
       return !(this.nextTriggerTime > 0 || this.isTriggerAtion);
     }
-    if (at.type !== 2 && at.type !== 6 && at.type !== 9 && at.type !== 11) {
+    if (
+      at.type !== 2 &&
+      at.type !== 6 &&
+      at.type !== 9 &&
+      at.type !== 11 &&
+      at.type !== 15
+    ) {
       // type 10 动作链是纯自动触发（idle 变体过点联动播），不构成用户可点判定——按"被挡"参与分区聚合，不当未实现计橙
       if (at.type === 10) return false;
       return null;
     }
+    // 15 下棋格属点击型（本机无 action，占用态着色由编排器限频/回合元信息补充，最小版不做）
     if (this.nextTriggerTime > 0 || this.isTriggerAtion) return false;
     // 反应播放中仅 focus=1 且播的正是本机动作时可点（checkClickAction 语义，数组 action 与游戏一致按不等处理）
     if (
@@ -795,6 +829,11 @@ export class DragMachine {
     this.parameterSmooth = 0;
     this.actionListIndex = 1;
     this.triggerActionTime = 0;
+    this.parameterMoveTrigger = false;
+    this.moveCheckStep = null;
+    this.parameterMove = null;
+    this.lastParameterMove = null;
+    this.delayTargetTime = null;
     for (const r of this.relations) {
       r.value = r.start ?? this.startValue;
       r.velocity = 0;

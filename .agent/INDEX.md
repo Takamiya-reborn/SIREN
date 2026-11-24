@@ -8,6 +8,7 @@
 | 提取、烘焙、皮肤目录、资源格式 | [extract.md](extract.md) |
 | ani/spine 皮肤（语法、烘焙、挂载、目录） | [spine.md](spine.md) |
 | 动作播放、挂载、交互、物理、视线等运行时行为 | [runtime.md](runtime.md) |
+| 皮肤小游戏（type 13 从动轮 / 15/16 下棋 / 棋盘清盘 / C# 参数覆盖语义） | [minigames.md](minigames.md) |
 | 已知根因对照（现象 → 机制） | [traps.md](traps.md) |
 | 测试命令、布局与编写要求 | [testing.md](testing.md) |
 | 代码风格、资产边界、提交消息（CM）等项目约定 | [conventions.md](conventions.md) |
