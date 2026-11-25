@@ -8,7 +8,7 @@
 ## 输出「趴平」/ 全 0 类
 
 - 物理输出全趴 → physics3.json 缺 Normalization：烘焙注入在 scripts/extract/physics.js `injectPhysicsNormalization()`。注意区分：合法 0 = 输入被 key 成 0，不是 bug。
-- 动作「不全」、引导环不亮 → 曲线目标混排（内核求值遇类型切换即停），extract 双层修复：scripts/extract/motion.js `convertClip()` + 运行时侧 src/l2d/motionPatches.js `normalizeCurveTargetOrder()`；同类现象先排除混排。
+- 动作「不全」、引导环不亮 → 曲线目标混排（内核求值遇类型切换即停），extract 双层修复：scripts/extract/motion.js `convertClip()` + 运行时侧 src/l2d/motion/patches.js `normalizeCurveTargetOrder()`；同类现象先排除混排。
 
 ## 姿态类
 
@@ -23,7 +23,7 @@
 
 ## 交互 / 触点类
 
-- 触点全灭 → 两条已知根因：canPlay 前置是 moc 默认不可满足的姿态顺带值；或节点因 motionStart 竞态滞留默认值（补账点 mount.js `mountModelInner()` 末尾）。
+- 触点全灭 → 两条已知根因：canPlay 前置是 moc 默认不可满足的姿态顺带值；或节点因 motionStart 竞态滞留默认值（补账点 mount/l2dMount.js 末尾）。
 - 「框无点」→ 分区路由缓存键须含姿态维度（interaction/hints.js `resolveRoute()`）。
 - 巨大判定框（数千像素）→ 背景板网格分区本体，非 bug（interaction/hitTest.js `meshHitTest()` 对整块网格照常命中，如 wuzang_3 touch_drag4）。
 - 交互配置条目序号与分区名错位 → 条目号 ≠ 分区命名号，逐条核对（配置源 scripts/extract/lua.js `parseShipL2d()`）。
@@ -36,13 +36,13 @@
 
 ## Ani / spine 类
 
-- 同名 atlas 二次 add 抛 "already exists" → pixi-spine ESM import 已自动注册 Loader 插件，手动再挂即重复（spineMount.js `mountSpineModel()`）。
-- spine 皮肤取景错位/翻转 → spine.json 画布头是导出估算值，与真实网格存在 Y 镜像/偏移，不可作取景依据；须走 fitSpine() 渲染包围盒（src/l2d/spineMount.js）。
-- spine 皮肤身体不可见 → 骨架多套皮肤且 initialSkin 为空，人物部件普遍不在 default 皮肤，挂载层须回落 skins[1]（spineMount.js `applySkin()`）。
+- 同名 atlas 二次 add 抛 "already exists" → pixi-spine ESM import 已自动注册 Loader 插件，手动再挂即重复（mount/spineMount.js `mountSpineModel()`）。
+- spine 皮肤取景错位/翻转 → spine.json 画布头是导出估算值，与真实网格存在 Y 镜像/偏移，不可作取景依据；须走 fitSpine() 渲染包围盒（src/l2d/mount/spineMount.js）。
+- spine 皮肤身体不可见 → 骨架多套皮肤且 initialSkin 为空，人物部件普遍不在 default 皮肤，挂载层须回落 skins[1]（mount/spineMount.js `applySkin()`）。
 - 3.8 JSON 读取器整体抛错而游戏正常 → 美术迭代旧附件名悬挂引用：setup 名与动画引用经同槽位最长公共前缀修补、仍落空的 deform 条目丢弃（spineSkel.js `repairName()`；游戏读取器静默跳过，pixi-spine 严格解析不跳）。
 - 会话中途页面报 deps 文件不存在 → @pixi-spine/all-3.8 是 CJS 且 import 有模块级副作用，冷发现式预构建中途重跑使旧 ？v= 哈希失效；optimizeDeps.include 随启动预构建规避（vite.config.js）。
 - twoColor 时间轴逐帧 `null.set` 崩 → 槽位 JSON 缺 `dark` 键（pixi-spine 的 Slot.darkColor 可空，spine-unity C# 非空结构体无此分歧）；转换器侧修复见 spine.md 转换方言。
 - spine 事件监听永远不触发、静默退化兜底无报错 → pixi-spine 的 AnimationStateListener `event` 回调是 `(entry, event)` 双参（runtime `entry.listener.event(entry, event_3)`），单参实现会把 TrackEntry 当事件对象取不得名；complete/end 是单参无此坑。
-- 换挂/卸载后整帧渲染崩死（卡帧循环）→ SpineBase.destroy 走到最后才把自己摘离父节点，销毁中途抛错会把半销毁对象滞留渲染树被 ticker 逐帧渲染（`transform` 已置 null）；且 `app.destroy(true)` 内部 `stage.destroy` 还会再清一遍子树。纪律：所有销毁点**先摘离再 destroy + try 包裹**，卸载钩子保证 `app.destroy` 恒被执行（L2dStage.vue `onBeforeUnmount`、spineMount.js 换挂段、mount.js `reveal()`）。
+- 换挂/卸载后整帧渲染崩死（卡帧循环）→ SpineBase.destroy 走到最后才把自己摘离父节点，销毁中途抛错会把半销毁对象滞留渲染树被 ticker 逐帧渲染（`transform` 已置 null）；且 `app.destroy(true)` 内部 `stage.destroy` 还会再清一遍子树。纪律：所有销毁点**先摘离再 destroy + try 包裹**，卸载钩子保证 `app.destroy` 恒被执行（stage/L2dStage.vue `onBeforeUnmount`、mount/spineMount.js 换挂段、mount/reveal.js `reveal()`）。
 - 转场/atlas 加载抛 "frame does not fit inside the base Texture" → atlas 文本声明尺寸与实际贴图尺寸不一致（美术 2x 导出）；spine-unity 归一化 UV 无碍、pixi-spine 像素框裁剪即崩，烘焙缩写修复见 spine.md 烘焙（`scaleAtlasPages()`）。
 - 换挂瞬间转场可见顿帧 → 两笔主线程开销砸在换挂帧：旧模型 GPU 销毁（几十 ms，先摘离后销毁、destroy 推迟一帧）+ 覆盖层预热回填重解析（~300ms，切换进行中不预热、切完回填）；预热缓存见 changeskin.md。

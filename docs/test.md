@@ -45,7 +45,7 @@ scripts/tests/
 
 ### unit/test_dragmachine.mjs — 拖拽参数机控制层
 
-**场景**：改 [src/utils/dragmachine/](../src/utils/dragmachine/)（machine.js / orchestrator.js / triggers.js）后回归。合成 ship_l2d 条目分三段覆盖：
+**场景**：改 [src/dragmachine/](../src/dragmachine/)（machine.js / orchestrator.js / triggers.js 及 machine*/playRoute/xiaqi/layers/readouts 分件）后回归。合成 ship_l2d 条目分三段覆盖：
 
 - **状态机**：type 1（按压邻域累计）/ 2（常规点击，含 down 配置）/ 3（长按播表 + slot11 回绕松开）/ 6（连点列表）/ 8（充能档位）/ 9（点参触发）/ 12（扩展动作规则过滤门；不主动触发，故 interactable 仍为 null）、relation 101（跟随拖动量）/ 103（开关下标对齐）、冷却塌缩（含 idle 起播）、interactable 红绿判定、ableFlag 开窗监听、pressLock 门控矩阵（谁按下上锁/谁不上锁/锁不影响 onMove/幂等 + reason 留痕）、additive 两阶段还原、localStorage 持久化、同值 changeIdleIndex 不复位、`idle` 摆位机的先切变体后播放、被顶掉动作的播放状态清理、resetAll 契约一揽子（平滑状态/下标/冷却/extendActionFlag 跨域残留全归位）。
 - **联动层**：kind 1 相对增量 / kind 2 绝对赋值、range 钳制、联动命中复位连点下标、apply 区间换挡 + idle_enable/idle_ignore 按变体取名单、type 3 变体号匹配、同值 changeIdleIndex 也广播（CT:1206-1224）、PLAY 通知经 onActionApply 发射、真实点击链路的 PLAY 发射。DRAG_CLICK(2) 为真路径：click_cd 名单命中自封冷却、type 2 监听机按被点分区赋值（校验名 = draw_able_name）、重复 idle 豁免的点击不发通知。
@@ -55,15 +55,15 @@ scripts/tests/
 
 ### unit/test_interaction.mjs — 交互状态机
 
-**场景**：改 [src/utils/interaction/](../src/utils/interaction/)（runtime.js / hitTest.js / hints.js）后回归。fixture 复刻两条游戏内实况链路："touch_idle1 摊开菜单 → touch_idle2 分支（起播 caidan=1）→ touch_idle3 收尾带回 0"与"touch_head 持有道具 glove（默认即满足）→ touch_head2 消耗 → touch_head3 产出"，覆盖：statePids/carryPids/gatedPids 派生（moc 默认给不出的前置不门控）、节点跟踪（pending 结算、被顶掉先行结算、idle 起播立即落账）、canPlay 门控（查节点不查实时参数）、firstVisibleHit 手势路由与透明度过滤、resetParameters/resetState、playHitMotion 精确命中与组内选支。提示层（hints.js）的分区路由缓存随姿态失效：键除 idle 变体/在播动作外带姿态签名（画布内顶点数与质心位置），摆位参数搬动标记网格后旧路由不滞留。需要 Cubism Core 在位（仅 import），缺文件时整支跳过。动作被顶掉、idle 起播立即结算以及参数复位窗口的行为也应与运行时保持一致。
+**场景**：改 [src/interaction/](../src/interaction/)（runtime.js / hitTest.js / hints/）后回归。fixture 复刻两条游戏内实况链路："touch_idle1 摊开菜单 → touch_idle2 分支（起播 caidan=1）→ touch_idle3 收尾带回 0"与"touch_head 持有道具 glove（默认即满足）→ touch_head2 消耗 → touch_head3 产出"，覆盖：statePids/carryPids/gatedPids 派生（moc 默认给不出的前置不门控）、节点跟踪（pending 结算、被顶掉先行结算、idle 起播立即落账）、canPlay 门控（查节点不查实时参数）、firstVisibleHit 手势路由与透明度过滤、resetParameters/resetState、playHitMotion 精确命中与组内选支。提示层（hints/index.js）的分区路由缓存随姿态失效：键除 idle 变体/在播动作外带姿态签名（画布内顶点数与质心位置），摆位参数搬动标记网格后旧路由不滞留。需要 Cubism Core 在位（仅 import），缺文件时整支跳过。动作被顶掉、idle 起播立即结算以及参数复位窗口的行为也应与运行时保持一致。
 
 ### unit/test_render.mjs — 渲染参数层
 
 **场景**：改 [src/l2d/](../src/l2d/) 渲染参数相关的控制层后回归。三段：
 
-- **palette**（改 src/l2d/palette.js）：调色板落笔豁免——在播动作曲线驱动的色轴不落笔（动作求值逐帧直写该参数，控制层复写会盖掉动作值），未驱动轴照常覆写为选色、无编排器全量落笔、无面板参数的皮肤整层旁路。
-- **ambient**（改 src/utils/ambient.js）：effect 组曲线采样，fetch 打桩喂 fixture motion3，覆盖四种段类型（线性/贝塞尔/阶跃/反阶跃）、超程钳制到参数范围（shengluyisi_5 Param90/92 达 14.7 的实况）、时长取模循环、缺失参数跳过绑定。曲线只经 loadAmbient+apply 驱动，不直接测内部函数。
-- **曲线目标序归一**（改 src/l2d/motionPatches.js）：内核求值循环按 Model→Parameter→PartOpacity 顺序遍历、遇类型切换即停，混排曲线会让其后同型曲线整体失去求值——归一必须把任何混排修成分组序（含 Meta 镜像同步/已分组原样/缺 Target 兜底/空数据不抛）。需 Cubism Core，缺文件时该段跳过。
+- **palette**（改 src/l2d/fx/palette.js）：调色板落笔豁免——在播动作曲线驱动的色轴不落笔（动作求值逐帧直写该参数，控制层复写会盖掉动作值），未驱动轴照常覆写为选色、无编排器全量落笔、无面板参数的皮肤整层旁路。
+- **ambient**（改 src/l2d/fx/ambient.js）：effect 组曲线采样，fetch 打桩喂 fixture motion3，覆盖四种段类型（线性/贝塞尔/阶跃/反阶跃）、超程钳制到参数范围（shengluyisi_5 Param90/92 达 14.7 的实况）、时长取模循环、缺失参数跳过绑定。曲线只经 loadAmbient+apply 驱动，不直接测内部函数。
+- **曲线目标序归一**（改 src/l2d/motion/patches.js）：内核求值循环按 Model→Parameter→PartOpacity 顺序遍历、遇类型切换即停，混排曲线会让其后同型曲线整体失去求值——归一必须把任何混排修成分组序（含 Meta 镜像同步/已分组原样/缺 Target 兜底/空数据不抛）。需 Cubism Core，缺文件时该段跳过。
 
 ### unit/test_ladder_loop.mjs — 梯子两圈环回
 
@@ -81,7 +81,7 @@ scripts/tests/
 
 ### asset/test_engine_motion.mjs — 真引擎 vs 自写求值器
 
-**场景**：改 motion3 求值器（helpers/motion3.mjs）、动作加载补丁（motionPatches.js）或引擎装配（helpers/engine.mjs）后回归。在 node 里构造真 Cubism4InternalModel（Core wasm + Framework 动作队列 + 渐变混合），按 60fps 虚拟时钟驱动动作，断言引擎逐参数值与自写求值器 sampleMotionAt 一致（容差 0.01）。通用皮肤发现（models/ 下第一套带 idle 组的皮肤），对照 idle 末支变体 + 首个非 idle 组第一支。
+**场景**：改 motion3 求值器（helpers/motion3.mjs）、动作加载补丁（motion/patches.js）或引擎装配（helpers/engine.mjs）后回归。在 node 里构造真 Cubism4InternalModel（Core wasm + Framework 动作队列 + 渐变混合），按 60fps 虚拟时钟驱动动作，断言引擎逐参数值与自写求值器 sampleMotionAt 一致（容差 0.01）。通用皮肤发现（models/ 下第一套带 idle 组的皮肤），对照 idle 末支变体 + 首个非 idle 组第一支。
 
 对照窗口避开两处引擎合法分歧，断言前消化：物理输出参数（physics3.json 的 Destination.Id）被物理求值在动作之后覆写；fade 混合期 `v = source + (curve-source)*w` 里 w<1 的区段与裸曲线不可比——引擎 fadeOut 按生产语义归零（fades 表出场由下一支 fadeIn 承担），采样点取 fadeIn 数倍后即避开。另有一帧起播延迟（动作入列计时发生在 startMotion 后的首次 update），先在 t0 步进一帧对齐。
 
@@ -121,7 +121,7 @@ node scripts/tests/probe/drive.mjs <皮肤目录> zones
 node scripts/tests/probe/drive.mjs <皮肤目录> minigame <入口分区> <判定分区> [轮数=20] [--seed 1]
 ```
 
-用真实 InteractionRuntime + DragOrchestrator + createActions 代码 + 真实 moc3/motion3 资产，在 node 里按 60fps 复现 viewer 的帧循环（restoreLayer -> motion 曲线 -> applyLayer），装配顺序与 mount.js 对齐。排查"点了没反应 / 播错动作 / 特殊待机扭曲 / 复位不干净"这类运行时问题先跑 `replay` / `zones`。
+用真实 InteractionRuntime + DragOrchestrator + createActions 代码 + 真实 moc3/motion3 资产，在 node 里按 60fps 复现 viewer 的帧循环（restoreLayer -> motion 曲线 -> applyLayer），装配顺序与 mount/l2dMount.js 对齐。排查"点了没反应 / 播错动作 / 特殊待机扭曲 / 复位不干净"这类运行时问题先跑 `replay` / `zones`。
 
 - `replay` 的 `--scene` 步骤：`wait:<sec>` 播放、`click:<zone>[:hold]` 点区域（hold 默认 0.15）、`reset` 调 ctx.actions.resetInteraction()。`--tap` 打印 orchestrator 的 [tap] 调试行；`--param` 末尾追加打印参数值。`--game "<clip> <motion>[@<t>]"` 与游戏应然态逐参数对比：应然态 = clip 的 state/carry 节点尾值 + 变体 motion 曲线@t；clip/motion 未覆盖的参数以 moc3 默认值为应然态，机器把开关写偏（如默认 1 被写成 0）也能暴露。
 - `chain`：逐次点击指定分区，打印动作日志与 `--watch` 参数的实时值轨迹，定位链系动作的触发/分档行为。
@@ -192,7 +192,7 @@ finish(); // 打印汇总（含失败名单）与 SUMMARY 行，按失败数设�
 约定：
 
 - 一支文件只挂一个 `suite()`（finish 会 process.exit），文件内分主题用 `section()`。
-- 不引入测试框架，不写无头浏览器测试——浏览器侧的诊断走 HUD 读数（见 src/utils/interaction/hints.js 的 createInteractionHints），node 只测纯逻辑。
+- 不引入测试框架，不写无头浏览器测试——浏览器侧的诊断走 HUD 读数（见 src/interaction/hints/index.js 的 createInteractionHints），node 只测纯逻辑。
 - 依赖真实资产的测试放 asset/ 且缺资产时跳过；依赖 Cubism Core 全局的（test_interaction）import 前先 `loadCubismCore()`。
 - 机器步进用假时钟（自己累加 `1/60` 逐帧调 `step`），不 sleep 真实时间。
 - **机器一律按条目 id 取**（machinesById/machineById）：orch.machines 的顺序 = entries 数组顺序而非 id 序，entries 中部插条目后位置解构会整体错位（trigger_types 段曾因此 6 项假失败）。

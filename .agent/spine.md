@@ -35,13 +35,13 @@
 - 入口：extract.js `main()` spine 分支——isSpineBundle 命中则要求 BUNDLE_DIR 下存在 `<modelId>_res`（缺失即报错），显示名经 lua.js `readTemplateByPainting()` 取自 ship_skin_template.lua，`bakeSpine()` 后直接 return，不走 L2D 管线。
 - 烘焙进度走 `[progress] <pct> <label>` stdout 协议（dev server 解析成进度条）。
 
-## 挂载（src/l2d/spineMount.js）
+## 挂载（src/l2d/mount/spineMount.js）
 
-- 分流点 mount.js `mountModel()`：url 以 `.spine.json` 结尾即动态 import spineMount 走独立挂载链。
+- 分流点 mount/index.js `mountModel()`：url 以 `.spine.json` 结尾即动态 import spineMount 走独立挂载链。
 - `mountSpineModel()`：pixi Loader + @pixi-spine/all-3.8 加载变体 JSON；解析 scale 固定 0.01（`SKELETON_SCALE`，游戏 SkeletonDataAsset 语义）。Loader 插件由 ESM import 自动注册，不得手动重复挂（否则同名 atlas 二次 add 抛 "already exists"）。
 - 皮肤激活 `applySkin()`：spine-unity initialSkinName 语义；空值且骨架有多套皮肤时回落 skins[1]——人物部件普遍不在 default 皮肤（如 aluomangshi 的 '1' 常规 / '2' 誓约两套着装，不回落则身体不可见），激活后 `setSlotsToSetupPose()`。
 - 分层预制体（meta.parts > 1）：按序把全部分区同时挂进一个 Container，各分区 SkeletonGraphic 独立 state、各按自身 startingAnimation 起播；单骨架挂 default/指定变体（`startPart()`，缺省 'normal' 循环，查不到退回首个动画）。
-- 取景 `fitSpine()`：按真实渲染包围盒——spine.json 画布头是导出估算值，与真实网格存在 Y 镜像/偏移，不可作取景依据；取景推迟一帧（pixi-spine mesh 顶点缓冲首次 update 前是全零）。
+- 取景 `fitSpine()`（mount/spineFit.js）：按真实渲染包围盒——spine.json 画布头是导出估算值，与真实网格存在 Y 镜像/偏移，不可作取景依据；取景推迟一帧（pixi-spine mesh 顶点缓冲首次 update 前是全零）。
 - 交互全旁路：ctx.runtime / ctx.orch / ctx.l2dOffset 保持 null（无交互状态机、无参数机、无取景 offset）；gestures 的 followGaze/resetGaze 走可选链旁路，onPointerUp 命中段对无 internalModel 直接 return；HUD 差分采样仅挂 Live2D internalModel，spine 整段跳过。
 - 宿主钩子：`ctx._spineFit`（camera.js `fitModel()` 的 spine 分支转发）与 `ctx._spinePlay`（L2dStage.vue `play(group)` 的 spine 分支，变体切换）。上报触发组：单骨架 = 变体名列表，分层 = 空数组（重挂即复位）。
 - 揭幕语义：加载完成即上台（无 L2D 入场硬切）。

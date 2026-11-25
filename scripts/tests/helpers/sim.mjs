@@ -34,10 +34,10 @@ export async function createPipelineSim(
   // Core 先加载（pixi-live2d-display 在模块求值时检查 window.Live2DCubismCore），src 模块随后动态 import
   const { model } = await loadMocModel(dir);
   const { InteractionRuntime } =
-    await import("../../../src/utils/interaction/runtime.js");
+    await import("../../../src/interaction/runtime.js");
   const { DragOrchestrator } =
-    await import("../../../src/utils/dragmachine/orchestrator.js");
-  const { createActions } = await import("../../../src/l2d/actions.js");
+    await import("../../../src/dragmachine/orchestrator.js");
+  const { createActions } = await import("../../../src/l2d/motion/actions.js");
 
   const P = model.parameters;
   const count = P.count;

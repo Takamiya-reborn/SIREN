@@ -1,11 +1,11 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import FormToggle from './components/FormToggle.vue'
-import L2dStage from './components/L2dStage.vue'
+import L2dStage from './components/stage/L2dStage.vue'
 import PullDialog from './components/PullDialog.vue'
-import SkinTab from './components/tabs/SkinTab.vue'
-import StateTab from './components/tabs/StateTab.vue'
-import { CATALOG, MODELS, TRIGGER_LABELS, TRIGGER_ORDER, campLabel, loadModels } from './utils/models'
+import SkinTab from './components/sidebar/SkinTab.vue'
+import StateTab from './components/sidebar/StateTab.vue'
+import { CATALOG, MODELS, TRIGGER_LABELS, TRIGGER_ORDER, campLabel, loadModels } from './catalog'
 
 const activeId = ref(MODELS[0]?.id ?? '')
 

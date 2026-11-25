@@ -4,7 +4,7 @@
 // 动作、白名单外的死点拒播、第二圈环回起点不断链。
 // 触发链时序与真机装配同款驱动：onUp 的点击确认窗用真实钟、动作播出冷却塌缩、
 // 播完 force 重播 'idle'。
-import { DragOrchestrator } from "../../../src/utils/dragmachine/index.js";
+import { DragOrchestrator } from "../../../src/dragmachine/index.js";
 import { machinesById } from "../helpers/machines.mjs";
 import {
   stubLocalStorage,

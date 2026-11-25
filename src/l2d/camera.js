@@ -28,7 +28,7 @@ const DRAG_REF_WIDTH =
   Number(localStorage.getItem("l2d_dragRefHeight")) || 1920;
 
 /**
- * @param ctx 舞台上下文（见 L2dStage.vue）
+ * @param ctx 舞台上下文（见 stage/L2dStage.vue）
  * @returns {{ fitModel(): void }} fitModel 按当前视口重新适配，同时更新 ctx.dragScale（拖拽坐标换算系数）
  */
 export function createCamera(ctx) {
@@ -39,7 +39,7 @@ export function createCamera(ctx) {
     const model = ctx.model;
     const app = ctx.app;
     if (!model || !app) return;
-    // spine 皮肤（Ani 类）无 internalModel，取景走 spineMount 留下的画布适配钩子
+    // spine 皮肤（Ani 类）无 internalModel，取景走 mount/spineMount.js 留下的画布适配钩子
     if (!model.internalModel) {
       ctx._spineFit?.();
       return;
@@ -135,7 +135,7 @@ export function createCamera(ctx) {
 
 /**
  * 遍历可见 drawable，返回场景包围盒（本地 px 空间）与角色锚点。
- * drawable 顶点在模型首次 update 时才由核心算出，加载瞬间读到的只是陈旧值，调用方需在首帧后再适配（见 mount.js）。
+ * drawable 顶点在模型首次 update 时才由核心算出，加载瞬间读到的只是陈旧值，调用方需在首帧后再适配（见 mount/l2dMount.js）。
  */
 function measureScene(model) {
   const internal = model.internalModel;

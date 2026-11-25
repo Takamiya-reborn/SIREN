@@ -7,7 +7,7 @@
 import {
   DragMachine,
   DragOrchestrator,
-} from "../../../src/utils/dragmachine/index.js";
+} from "../../../src/dragmachine/index.js";
 import { machinesById, machineById } from "../helpers/machines.mjs";
 import {
   stubLocalStorage,

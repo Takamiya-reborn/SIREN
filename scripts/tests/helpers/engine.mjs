@@ -21,7 +21,7 @@ export async function createEngineModel(dir) {
   // fades 给默认表：生产路径下 fades.json 恒存在且 fadeOut 被置 0（出场由下一支动作的 fadeIn 承担），
   // 缺表时内核 fadeOut 保持 300ms，短非循环动作结尾会进入淡出冻结区，与裸曲线不可比——测试引擎须同语义
   const { installMotionPatches } =
-    await import("../../../src/l2d/motionPatches.js");
+    await import("../../../src/l2d/motion/patches.js");
   installMotionPatches({ fades: { default: 0.3 } });
 
   if (!frameworkReady) {

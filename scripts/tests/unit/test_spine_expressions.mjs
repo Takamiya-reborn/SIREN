@@ -2,7 +2,7 @@
 // 覆盖判定三形态（全 attachment / 混入骨骼时间轴 / 空时间轴）与数字名升序默认选择。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { expressionOverlays } from "../../../src/l2d/spineExpressions.js";
+import { expressionOverlays } from "../../../src/l2d/spine/expressions.js";
 
 const attTl = () => ({ attachmentNames: ["a", null] });
 const boneTl = () => ({ rotate: [0] });

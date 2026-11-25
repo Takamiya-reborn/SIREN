@@ -8,34 +8,49 @@
 
 | 逻辑 | 位置 |
 |---|---|
-| 挂载总入口（url 以 .spine.json 结尾分流 spine 链）、复位缓动登记、Breath 移除、trackMotionStart 补账 | mount.js `mountModel()` / `mountModelInner()` |
-| Ani（spine）皮肤挂载链（皮肤激活、分层预制体、包围盒取景） | spineMount.js `mountSpineModel()` / `fitSpine()` / `applySkin()` / `startPart()` |
-| 动作播放、动作变体切换、就地复位 | actions.js `createActions()` → `playMotion()` / `resetInteraction()` / `handleHitAreas()` |
+| 挂载总入口（url 以 .spine.json 结尾分流 spine 链，两条链均动态 import） | mount/index.js `mountModel()` |
+| L2D 挂载链（时序令牌、复位缓动登记、Breath 移除、trackMotionStart 补账、编排器装配、入口 idle） | mount/l2dMount.js `mountL2dModel()` |
+| 揭幕时序（形态切换闸门等待循环 + 两帧后揭幕序列，两链共用） | mount/reveal.js `waitRevealGate()` / `scheduleReveal()` |
+| 挂载内嵌诊断（锚点元凶自动取证、60 帧探针） | mount/diagnostics.js `maybeAnchorSweep()` / `installFrameProbe()` |
+| Ani（spine）皮肤挂载链（皮肤激活、分层预制体、宿主钩子） | mount/spineMount.js `mountSpineModel()` / `applySkin()` / `startPart()` |
+| spine 取景几何（hitArea 优先 → 内容分位数框 → 全包围盒） | mount/spineFit.js `fitSpine()` / `attachmentBoxes()` |
+| 动作播放、动作变体切换、就地复位 | motion/actions.js `createActions()` → `playMotion()` / `resetInteraction()` / `handleHitAreas()` |
 | 拖拽视线跟随与手势分发 | gestures.js `createGestures()` → `followGaze()` / `resetGaze()` / `machineZonesAt()` |
 | 相机取景与锚点（游戏三层取景链 + 按宽适配 + userView 三轴、spine 分支转发，语义见 runtime.md 取景节） | camera.js `createCamera()` → `fitModel()` / `measureScene()` / `pickAnchorX()` |
-| 誓约戒指（Paramring 逐帧写） | ring.js `RING_PARAM` / `createOathRing()` |
-| 调色板 keyform 颜色动画 | palette.js `installPalette()`；渲染补丁 colorPatches.js `installColorPatch()` |
-| effect 组常驻氛围层（贝塞尔曲线采样叠加） | src/utils/ambient.js `loadAmbient()` / `sampleCurve()` |
-| 触点涟漪（游戏 ui/clickeffect 同构） | clickEffect.js `createClickEffect()` → `spawn()` / `updateParticle()` |
-| 曲线目标序归一化（混排修复的运行时侧） | motionPatches.js `normalizeCurveTargetOrder()` / `installMotionPatches()` |
-| 参数覆写层 | paramOverride.js `createParamOverride()` |
-| HUD 数据侧（含取景三轴注入 view 组） | hud.js `createTickerCallback()` → `motionDiffReadout()` / `overrideReadout()` / `paramListReadout()` / `view`；差分采样 motionDiff.js `diffMotion()` |
+| 誓约戒指（Paramring 逐帧写） | fx/ring.js `RING_PARAM` / `createOathRing()` |
+| 调色板 keyform 颜色动画 | fx/palette.js `installPalette()`；渲染补丁 fx/colorPatches.js `installColorPatch()` |
+| effect 组常驻氛围层（贝塞尔曲线采样叠加） | fx/ambient.js `loadAmbient()` / `sampleCurve()` |
+| 触点涟漪（游戏 ui/clickeffect 同构） | fx/clickEffect.js `createClickEffect()` → `spawn()` / `updateParticle()` |
+| 曲线目标序归一化（混排修复的运行时侧） | motion/patches.js `normalizeCurveTargetOrder()` / `installMotionPatches()` |
+| 参数覆写层 | hud/paramOverride.js `createParamOverride()` |
+| HUD 数据侧（含取景三轴注入 view 组） | hud/index.js `createTickerCallback()` → `motionDiffReadout()` / `overrideReadout()` / `paramListReadout()` / `view`；差分采样 motion/diff.js `diffMotion()` |
 
-## 交互层（src/utils/）
+## 交互层（src/dragmachine/ + src/interaction/）
 
 | 逻辑 | 位置 |
 |---|---|
-| 拖拽参数机状态机（步进、死区吸附、平滑趋近） | dragmachine/machine.js `setParameterValue()` / `smoothDamp()` / `fixRange()` |
-| 配置加载与机器参数图层（Override/Additive/Multiply） | dragmachine/orchestrator.js `loadL2dConfig()`、机器图层段（约 377 行起） |
+| 单台参数机壳（构造器、状态契约表、状态属主方法） | dragmachine/machine.js `DragMachine`（契约表在文件头） |
+| 触发链路（冷却、点击判定触发、联动事件、type 12 扩展门） | dragmachine/machineTrigger.js `triggerAble()` / `applyClickTrigger()` / `applyTrigger()` / `onListenerEvent()` |
+| 指针事件（startDrag/onDrag/stopDrag、档位吸附） | dragmachine/machinePointer.js `onDown()` / `onMove()` / `onUp()` / `updatePartsSnap()` |
+| 每帧步进与查询（平滑趋近、relation 联动求值、interactable） | dragmachine/machineStep.js `step()` / `updateRelations()` / `interactable()` |
+| 数学件与阈值（SmoothDamp、fixRange） | dragmachine/math.js `smoothDamp()` / `fixRange()` |
+| 编排器壳（路由面、指针分发、按压锁、白名单检查、复位） | dragmachine/orchestrator.js `DragOrchestrator` / `loadL2dConfig()` |
+| 播放路由（activeData 应用、idle 变体切换、播放状态回报） | dragmachine/playRoute.js `onActionApply()` / `applyActiveData()` / `noteMotionStart()` |
+| 下棋小游戏（type 15/16 棋局） | dragmachine/xiaqi.js `xiaqiClick()` / `xiaqiCheckFinish()` |
+| 机器参数图层（Override/Additive/Multiply 两阶段叠加） | dragmachine/layers.js `layerEntries()` / `restoreLayer()` / `applyLayer()` |
+| HUD 读数聚合 | dragmachine/readouts.js `gateInfo()` / `hudInfo()` |
 | 触发处理器分发 | dragmachine/triggers.js `TRIGGER_HANDLERS` |
 | 交互运行时（挂起动作结算、表外补账、平滑复位） | interaction/runtime.js `loadInteraction()` → `trackMotionStart()` / `applyEnd()` / `beginSmoothReset()` |
 | 分区命中（网格三角形逐点判定、边界环提取） | interaction/hitTest.js `meshHitTest()` / `boundaryEdges()` / `boundaryLoops()` |
-| 触点提示与判定引导环 | interaction/hints.js `createInteractionHints()` → `routeWinner()` / `resolveRoute()` / `drawJudgeRings()` |
-| 模型枚举、皮肤目录、阵营/触发标签 | src/utils/models.js `MODELS` / `CATALOG` / `loadCatalog()` / `CAMP_LABELS` / `TRIGGER_LABELS` |
+| 交互点提示层（工厂壳 + 逐分区绘制） | interaction/hints/index.js `createInteractionHints()` |
+| 提示点路由（命中胜者、露出点重定位） | interaction/hints/route.js `routeWinner()` / `resolveRoute()`；几何件 hints/geometry.js；标签 hints/labels.js |
+| 判定引导环（type 11 扫描动效） | interaction/hints/judgeRings.js `createJudgeRings()` |
+| 锚点元凶扫描（诊断） | interaction/hints/anchorSweep.js `anchorCulpritSweep()` |
+| 皮肤目录与模型清单（唯一 Vue 依赖模块） | src/catalog.js `MODELS` / `CATALOG` / `loadCatalog()` / `CAMP_LABELS` / `TRIGGER_LABELS` |
 
 ## 前端界面
 
-- App.vue 总入口；components/L2dStage.vue 舞台；components/tabs/（SkinTab.vue 皮肤页含类型筛选 `TYPE_FILTERS`、StateTab.vue 状态页）；components/debug/HudPanel.vue 调试面板（含取景三轴注入）。
+- App.vue 总入口；components/stage/（L2dStage.vue 舞台壳 + stageContext.js ctx 工厂 + stageLifecycle.js pixi 装配/销毁 + usePersistedFlag.js 持久化开关）；components/hud/（HudPanel.vue 面板壳 + Toolbar.vue 工具排 + GroupSection.vue 折叠组壳 + groups/ 六面板组 + panelGroups.js 分组开合持久化 + panel.css 共享样式）；components/sidebar/（SkinTab.vue 皮肤页 + useSkinFilters.js 筛选状态 + StateTab.vue 状态页 + ScrollBar.vue）；components/PullDialog.vue 拉取浮层。
 
 ## 提取与工具链（scripts/）
 

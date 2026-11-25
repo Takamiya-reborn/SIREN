@@ -1,5 +1,5 @@
 /** 指针手势状态机（原生 DOM 事件，模拟 Unity 端控制器）：视线目标是当前指针位置，按住才跟随、松手回正（focusController 内部缓动过渡）；松手时位移小于阈值算点击、否则算拖拽（触发 touch_drag 分区而非 touch_idle 分区）。按下先尝试机器分区分流（拖拽参数机接管），未消费再走 meshHitTest 精确命中 -> 状态机播放路径。读 ctx.app / ctx.model / ctx.orch / ctx.dragScale / ctx.actions.handleHitAreas，写 ctx.lastGesture。 */
-import { meshHitTest } from "../utils/interaction";
+import { meshHitTest } from "../interaction";;
 
 // 游戏内：松手时位移小于阈值算点击、否则算拖拽
 const DRAG_THRESHOLD = 10;
@@ -7,7 +7,7 @@ const DRAG_THRESHOLD = 10;
 const GAZE_START_THRESHOLD = 3;
 
 /**
- * @param ctx 舞台上下文（见 L2dStage.vue）
+ * @param ctx 舞台上下文（见 stage/L2dStage.vue）
  * @returns {{ onPointerDown, onPointerMove, onPointerUp, onPointerCancel }} 绑定到 canvas 的四个原生指针监听器
  */
 export function createGestures(ctx) {

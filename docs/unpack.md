@@ -147,7 +147,7 @@ ani（spine）皮肤的产物布局：
 
 ## 5. 在查看器中的还原
 
-浏览器加载模型目录后，`src/l2d/` 装配舞台、镜头、动作和手势，`src/utils/interaction/` 消费 `interaction.json`，`src/utils/dragmachine/` 消费 `l2d.json`，`src/utils/ambient.js` 叠加 `effect` 氛围曲线。还原过程的核心对应关系如下：
+浏览器加载模型目录后，`src/l2d/` 装配舞台、镜头、动作和手势，`src/interaction/` 消费 `interaction.json`，`src/dragmachine/` 消费 `l2d.json`，`src/l2d/fx/ambient.js` 叠加 `effect` 氛围曲线。还原过程的核心对应关系如下：
 
 | 游戏数据                       | 查看器还原                               |
 | ------------------------------ | ---------------------------------------- |

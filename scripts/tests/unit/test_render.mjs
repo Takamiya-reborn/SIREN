@@ -15,7 +15,7 @@ const { check, eq, section, finish } = suite(
 // ============ palette ============
 section("调色板落笔豁免");
 {
-  const { installPalette } = await import("../../../src/l2d/palette.js");
+  const { installPalette } = await import("../../../src/l2d/fx/palette.js");
 
   const IDS = [
     "touch_drag11",
@@ -108,7 +108,7 @@ section("调色板落笔豁免");
 // ============ ambient ============
 section("effect 氛围层曲线采样");
 {
-  const { loadAmbient } = await import("../../../src/utils/ambient.js");
+  const { loadAmbient } = await import("../../../src/l2d/fx/ambient.js");
 
   globalThis.window = { location: { href: "http://localhost/" } };
 
@@ -212,7 +212,7 @@ if (!cubismCoreAvailable()) {
   // motionPatches 顶层 import 依赖 Core 先就位（dist 模块顶层检查 window.Live2DCubismCore）
   await loadMocModel("models/fulici/fulici_2").catch(() => {});
   const { normalizeCurveTargetOrder } =
-    await import("../../../src/l2d/motionPatches.js");
+    await import("../../../src/l2d/motion/patches.js");
 
   const curve = (id, target) => ({
     Id: id,

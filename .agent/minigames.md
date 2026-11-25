@@ -9,7 +9,7 @@
 - type 13（DRAG_WITH_PARAMETER_MOVE 参数从动轮）：仅 qiye_10（137061）×6 + beilaosenlin_2（806011）×1
 - type 15/16（下棋）：仅 suweiaitongmeng_3（705022）
 - type 14（DRAG_MOVE_DOWN_UP）：CN 全量数据零实例，本仓不做
-- 本仓实现落点：triggers.js [13]/[16]、orchestrator.js xiaqiClick/xiaqiCheckFinish、machine.js setTargetValueDelay/delayTargetTime 闸（细节见 machine.js 头部状态契约表，不在此重复）
+- 本仓实现落点：dragmachine/triggers.js [13]/[16]、dragmachine/xiaqi.js xiaqiClick/xiaqiCheckFinish、dragmachine/machine.js setTargetValueDelay/delayTargetTime 闸（细节见 machine.js 头部状态契约表，不在此重复）
 
 ## type 13 参数从动轮
 

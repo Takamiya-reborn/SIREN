@@ -28,7 +28,7 @@
 
 - 一键更新：`npm run update`（scripts/update.js）串 `pull_lua.js --force` → `pull_bundles.js --index` → `gen_catalog.js`，末尾 diff 报版本变化与新增/移除皮肤；任一步失败即中止。代理取值优先级：`--proxy` 显式值 > `HTTPS_PROXY` 环境 > 本机端口探测（7890/7892/7897）。
 - 判据：`painting ∈ hashes`，**大小写不敏感**（模板 painting 可含大写如 Z46_2；lua.js `readTemplateByPainting()`）。
-- 阵营取 `ship_group`：扫 statistics 的 nationality 字段；模板 id 尾数不可靠（qiye_9 教训）。值域：1-9 / 11 郁金 / 96 风暴 / 97 META / 其余归其他（models.js `CAMP_LABELS`）。
+- 阵营取 `ship_group`：扫 statistics 的 nationality 字段；模板 id 尾数不可靠（qiye_9 教训）。值域：1-9 / 11 郁金 / 96 风暴 / 97 META / 其余归其他（src/catalog.js `CAMP_LABELS`）。
 - `{namecode:N}` 占位由 name_code.lua 代换。
 - `_hx` 和谐变体整层剔除，查看器一律非和谐；目录提交时纯名字条目豁免审核。
 - 索引/目录错位陷阱：UI 拉取（api.js `/api/extract` → pull_bundles）无条件顺带刷新设备索引但不刷目录——catalog 落后于 .tmp 索引不是 gen_catalog 的 bug，重跑 update.js 平账。目录同时是 UI 执行白名单（api.js `/api/extract` 校验 painting ∈ catalog），新皮肤必须先进目录才可在 UI 拉取。

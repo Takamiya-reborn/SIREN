@@ -62,7 +62,7 @@ _SIREN_ 全称 _SIREN Is Redressing the Entire Navy_ 。还在因为电脑上需
 - `fades.json` 保存 Unity Animator 按动作提取的 AnyState 转场时长；查看器按 clip 应用交叉渐变，并让交互参数复位使用同一时长，缺失时回退到 300ms。
 - 动作库补丁对齐游戏本体运行时语义：曲线目标分组序归一、参数落笔去钳位（游戏直写原值，越出 moc3 量程的值是合法姿态）。
 - `idle` 动作支持先切换变体再播放，适用于用背景网格切换待机摆位的皮肤；被新动作顶掉的旧反应不会遗留“播放中”状态。
-- `src/l2d/` 负责舞台、镜头、动作与手势装配，`src/utils/` 负责交互状态机、拖拽参数机和氛围动画；详细还原规则以 [unpack.md](docs/unpack.md) 为准。
+- `src/l2d/` 负责舞台、镜头、动作与手势装配，`src/dragmachine/` 与 `src/interaction/` 负责拖拽参数机与交互状态机；详细还原规则以 [unpack.md](docs/unpack.md) 为准。
 - ani（spine）皮肤走独立挂载链（pixi-spine 3.8），贴图按预乘 alpha（PMA）语义渲染；提取与烘焙见 [unpack.md](docs/unpack.md) 3.4 节。
 - 双形态皮肤（L2D 与 ani 并存）提供形态开关：切换动画由独立的 changeskin 转场覆盖层播放（事件驱动换挂与换入时机），实现细节与已知限制见 [unpack.md](docs/unpack.md) 3.5 节。
 - 未烘焙 `l2d.json` 的皮肤仍可加载，但会跳过参数机层，退回基础交互路径。
@@ -75,9 +75,11 @@ tools/adb/            # Android 平台工具（Apache 2.0，NOTICE 随目录分�
 tools/Il2CppDumper/   # 游戏 C# 程序集 dump 工具（MIT，逆向期参考，仅保留 x64 主程序与 config.json）
 models/               # 导出的标准 Cubism 模型（moc3 v4/v5），按 <角色>/<皮肤id> 两级目录组织（不入库）；changeskin/ 顶级目录例外，存放双形态换装转场覆盖层（跨皮肤共享，不入侧栏）
 src/                  # Vue 前端（图鉴 + L2D 舞台 + 交互层）
-├── components/       # UI：L2dStage（瘦壳）+ tabs/ 侧栏 + debug/HudPanel（HUD 面板）
-├── l2d/              # 舞台核心（普通模块 + ctx 对象，不依赖 vue）：motionPatches（动作库补丁）、motionDiff（动作曲线差分）、paramOverride（HUD 参数注入）、camera（取景与拖拽标定）、mount（模型挂载装配）、actions（播放 API）、gestures（指针手势）、hud（每帧读数）
-└── utils/            # 交互实现：interaction/（状态机运行时、网格命中、提示层）、dragmachine/（拖拽参数机 machine/orchestrator/triggers）、ambient（effect 氛围层）、models（皮肤清单）
+├── catalog.js        # 皮肤清单与目录（MODELS/CATALOG，唯一带 Vue 依赖的模块）
+├── components/       # UI：stage/（L2dStage 舞台壳 + ctx 装配 + 生命周期）、hud/（HUD 面板：壳 + 工具排 + 折叠组壳 + 6 面板组 + 共享样式）、sidebar/（SkinTab/StateTab 侧栏 + 筛选状态）
+├── l2d/              # 舞台运行时（普通模块 + ctx 对象，不依赖 vue）：mount/（挂载总入口、L2D/spine 两条挂载链、揭幕时序、取景几何）、motion/（动作库补丁、播放 API、曲线差分）、hud/（每帧读数、参数注入）、fx/（氛围层、调色板、涟漪、誓约戒指）、camera、gestures（取景与指针手势）
+├── dragmachine/      # 拖拽参数机：machine（单台壳 + 触发/指针/步进/数学分件）、orchestrator（编排器壳 + 播放路由/下棋/参数图层/HUD 读数分件）、triggers（触发处理器表）
+└── interaction/      # 交互状态机：runtime（有向图运行时）、hitTest（网格命中）、hints/（交互点提示 + 判定引导环 + 锚点诊断）
 ```
 
 `.tmp/` 为管线工作目录（gitignore），由脚本按需自动创建：`pull_bundles.js` 建 `.tmp/bundles/`，游戏 Lua 参考快照由 `pull_lua.js` 拉到 `.tmp/lua/`（见下）。

@@ -15,7 +15,7 @@ if (!cubismCoreAvailable()) {
 }
 await loadCubismCore();
 const { InteractionRuntime } =
-  await import("../../../src/utils/interaction/index.js");
+  await import("../../../src/interaction/index.js");
 
 const clips = {
   // 摊开菜单：caidan 0→1，场景位移 All_X 0→2.34（连续摆位 carry）

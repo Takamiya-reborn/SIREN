@@ -1,0 +1,478 @@
+/* HUD 面板共享样式（原 HudPanel.vue style 块整体平移，类名保持原名；由 HudPanel.vue 以非 scoped <style src> 引入一次） */
+/* 交互点/调试开关：右下角一排 + 状态机参数 HUD（测试用） */
+.stage-toolbar {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.hint-toggle {
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(16, 16, 20, 0.72);
+  backdrop-filter: blur(12px);
+  color: #8a8a93;
+  font: 500 12px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.hint-toggle:hover {
+  background: rgba(35, 35, 44, 0.9);
+  color: #e8e8ee;
+}
+
+/* 开启态：浅底深字，与关闭态的深底亮字一眼可辨 */
+.hint-toggle.on {
+  border-color: rgba(159, 217, 189, 0.4);
+  background: rgba(159, 217, 189, 0.9);
+  color: #10221a;
+}
+
+/* 调试面板（测试用）：分组折叠，组头收起时带单值摘要；整体向上生长不遮模型重心。
+   高度钳在视口内，超出出滚动条（参数/状态组长列表撑开时收在屏内）；滚动需接管鼠标，
+   面板区域内点击不再穿透到模型 */
+/* 面板叠放容器：调试面板 + 注入面板共用锚点，纵向排列互不遮挡 */
+.debug-stack {
+  position: absolute;
+  /* 层级压过 FormToggle(z:5)：面板展开时盖住右上角胶囊 */
+  z-index: 6;
+  /* 右缘 40px：避开状态触发收起后探进屏幕 32px 的圆钮把手 */
+  right: 40px;
+  bottom: 44px;
+  /* 定宽：收缩适配链路里 auto-fill 网格在可用宽度不定时按"全格单行"取 max-content，
+     面板会被一路顶到上限；定宽后状态/注入两块面板同宽稳定，网格按实际宽度分列 */
+  width: min(660px, 46%);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.debug-stack::-webkit-scrollbar {
+  width: 6px;
+}
+
+.debug-stack::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.debug-stack::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(159, 217, 189, 0.35);
+}
+
+.debug-stack>.debug-panel {
+  max-width: 100%;
+  pointer-events: auto;
+}
+
+.debug-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(12, 12, 16, 0.72);
+  backdrop-filter: blur(12px);
+  color: #9fd9bd;
+  font: 500 11px/1.6 ui-monospace, monospace;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.debug-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.debug-panel::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.debug-panel::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(159, 217, 189, 0.35);
+}
+
+/* 每个分组：组头占 auto 行，内容体行 0fr（收起）/ 1fr（展开）过渡出高度动画；
+   组间细分割线 + 组头留白，一眼可辨各分界 */
+.group {
+  display: grid;
+  grid-template-rows: auto 0fr;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: grid-template-rows 0.15s;
+}
+
+.group:last-of-type,
+.group.open-last {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.group.open {
+  grid-template-rows: auto 1fr;
+}
+
+/* 组头高亮底：与展开内容（面板原底）拉开底色差，title 一眼可辨；
+   负外边距把底色拉到面板内边距上，文字落点不变 */
+.group-head {
+  display: flex;
+  align-items: center;
+  column-gap: 5px;
+  margin: 0 -6px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 5px;
+  background: rgba(159, 217, 189, 0.1);
+  color: #b6c9c0;
+  font: inherit;
+  letter-spacing: 0.05em;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.group-head:hover {
+  background: rgba(159, 217, 189, 0.18);
+  color: #e8e8ee;
+}
+
+/* 分组箭头：展开时右转 90° 朝下 */
+.tri {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.tri.open {
+  transform: rotate(90deg);
+}
+
+.group-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  padding-left: 13px;
+  /* 网格项默认 min-height:auto 不许缩，需显式归零才能被 0fr 行压没 */
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.group.open .group-body {
+  opacity: 1;
+}
+
+/* 强播/注入行：下拉与按钮同排同高（面板本体 pointer-events 穿透，行内控件显式接管） */
+.debug-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  pointer-events: auto;
+}
+
+.debug-row .debug-select,
+.debug-row .hint-toggle {
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 10px;
+}
+
+.debug-select {
+  max-width: 200px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(35, 35, 44, 0.9);
+  color: #9fd9bd;
+  font: inherit;
+}
+
+.debug-select:hover {
+  background: rgba(50, 50, 62, 0.9);
+}
+
+.gates-body {
+  flex-direction: column;
+}
+
+.debug-pair {
+  white-space: nowrap;
+}
+
+/* 非默认残留读数弱化（连续摆位的遗留值，非门控参数） */
+.debug-pair.dim,
+.dim {
+  color: #6f9f88;
+}
+
+/* 异常态读数（播放中滞留等）：暖色提示一眼可辨 */
+.debug-pair.warn,
+.warn {
+  color: #e8b06f;
+}
+
+/* 组头小图标按钮（复位等）：面板穿透、按钮自身接管 */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.75;
+}
+
+.icon-btn:hover {
+  opacity: 1;
+}
+
+/* 注入组：参数行（滑杆 + 值 + 开关 + 移除），面板本体穿透、行内控件显式接管 */
+.inject-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  pointer-events: auto;
+}
+
+.inject-input {
+  width: 130px;
+}
+
+.inject-range {
+  flex: 1;
+  min-width: 80px;
+}
+
+.inject-check {
+  accent-color: #9fd9bd;
+}
+
+/* 取景复位钮共用外壳（三轴单项 + 三轴合复位）：圆角正方形常显，深色底 + 悬停亮起 */
+.reset-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  border: 1px solid #4a4a52;
+  border-radius: 6px;
+  background: #2a2a30;
+  color: #b8b8c0;
+  line-height: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.15s, color 0.15s;
+}
+
+.reset-btn:hover {
+  background: #3a3a42;
+  color: #e8e8ee;
+}
+
+/* 注入组头行：开合按钮 + 只看变化中开关 + 统计同排（面板穿透，行内控件显式接管） */
+.inject-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.inject-head .group-head {
+  flex: 1;
+}
+
+.inject-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.inject-only input {
+  accent-color: #9fd9bd;
+  margin: 0;
+}
+
+/* 注入备选参数清单：分组网格平铺 + 超高滚动，点格注入；宽度占满面板（stack 已定宽，网格分列稳定） */
+.param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  max-height: 420px;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.param-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.param-list::-webkit-scrollbar-track {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.param-list::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(159, 217, 189, 0.35);
+}
+
+/* Firefox 不认 webkit 伪元素，标准属性收在这里；不能与伪元素同写——
+   Chromium 121+ 只要 scrollbar-width/color 非 auto 就整个忽略 ::-webkit-scrollbar，
+   回落成系统 Fluent 悬浮滑块（浮在面板边缘上的"悬空"一条） */
+@supports not selector(::-webkit-scrollbar) {
+
+  .debug-stack,
+  .debug-panel,
+  .param-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(159, 217, 189, 0.35) rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* 分组标题行高亮：组名 ×数量一眼可辨，隔开上下两组网格 */
+.param-group-head {
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-left: 2px solid #9fd9bd;
+  background: rgba(159, 217, 189, 0.1);
+  white-space: nowrap;
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1px;
+}
+
+/* 格子描边 + 细缝拼合成表：散排变整块，读数不再飘 */
+.param-cell {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.param-cell .cell-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.param-cell:hover .cell-id {
+  color: #e8e8ee;
+}
+
+/* 离默认值的参数暖色：扫一眼即知哪些在被动作/物理驱动 */
+.param-cell.off .cell-val {
+  color: #e8b06f;
+}
+
+/* 已注入的格高亮：清单与覆盖层一一对应 */
+.param-cell.picked .cell-id {
+  color: #9fd9bd;
+}
+
+/* 可点击读数（调色板色轴循环/复位）：与提示开关同族的悬停反馈 */
+.debug-pair.clickable {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.debug-pair.clickable:hover {
+  color: #e8e8ee;
+}
+
+/* 判定门刻度条（type 11 区间机）：轨道 + 各区间段，实时值所在段点亮 */
+.gate {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+
+.gate-head {
+  white-space: nowrap;
+}
+
+.gate-track {
+  position: relative;
+  height: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gate-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #6f9f88;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 实时值落在的区间段：点亮 */
+.gate-band.hit {
+  background: rgba(159, 217, 189, 0.28);
+  color: #dff5ea;
+}
+
+/* 下棋九宫格：3×3 等宽格，玩家子/AI 子分色 */
+.xiaqi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  gap: 2px;
+}
+
+.xiaqi-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.xiaqi-cell.me {
+  color: #9fd9bd;
+}
+
+.xiaqi-cell.ai {
+  color: #e8b06f;
+}

@@ -53,7 +53,7 @@ change_out/change_in 模型动作链并存但语义不同。
   在端点）在各动画全程的**时间交集矩形**，按动画名归档进 variants[].covers（挂载本地 px，
   y-down，×解析 0.01）。曲线段（bezier）展开求值（spineBake.js `sampleAt()` 配 dense 表）
   ——ease 曲线无过冲，帧时刻采样即精确。
-- 挂载层（src/l2d/changeskinOverlay.js `fitOverlay()`）：contain 语义贴合安全区
+- 挂载层（src/l2d/spine/changeskin.js `fitOverlay()`）：contain 语义贴合安全区
   （scale = max(vw/w, vh/h)）再乘 `SAFE_MARGIN = 1.1`——房间贴图边缘是羽化笔触（半透明），
   视口须小于四边形才不透底。纯数值换算，无顶点时序依赖（顶点探测路线曾因 visible=false
   挡住 updateTransform、顶点全零而全面失败，已弃用）。
@@ -62,7 +62,7 @@ change_out/change_in 模型动作链并存但语义不同。
 
 ## 查看器编排
 
-- src/l2d/changeskinOverlay.js `playChangeOverlay()`：加载（warmCache 预热缓存单次消费）
+- src/l2d/spine/changeskin.js `playChangeOverlay()`：加载（warmCache 预热缓存单次消费）
   → fitOverlay（安全区 contain × SAFE_MARGIN）→ 起播 change_N → 事件 `action` 放行换挂
   （handle.swap）→ 事件 `finish` 挂起销毁计时（+0.5s）；complete/end/15s 兜底；提前销毁时
   两个 promise 一并放行防挂起。播放期逐帧自置顶（模型换挂会把新模型插到覆盖层之上）。
@@ -71,7 +71,7 @@ change_out/change_in 模型动作链并存但语义不同。
   playChangeIn('change_in')（change_in→login fallback，L2dStage.vue `playChangeIn()`）→
   回填预热。覆盖层路径**不登记换入组**（login 压在 finish 之后，避免与转场后半段叠播）；
   未烘焙的 action 退化原 change_out 链。
-- 换挂顿帧治理：旧模型销毁先摘离、destroy 推迟一帧（spineMount.js 换挂段、mount.js
+- 换挂顿帧治理：旧模型销毁先摘离、destroy 推迟一帧（mount/spineMount.js 换挂段、mount/reveal.js
   `reveal()`）；形态切换进行中不预热（App.vue `onStageMotions()`），切完回填反方向配置。
 - 诊断日志：`[changeskin] 动画/取景/事件` 三行（对齐 [perf] 风格）。
 
