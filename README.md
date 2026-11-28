@@ -14,7 +14,7 @@ _SIREN Is Redressing the Entire Navy_
 
 </div>
 
-_SIREN_ 全称 _SIREN Is Redressing the Entire Navy_ 。还在因为电脑上需要安装模拟器来游玩的烦恼吗？感觉玩皮肤的时候关卡等功能都很多余？使用本项目即可无需这些繁琐的步骤，只需要连接你的手机(使用数据线或者远程调试都可以)，开启adb调试之后，就可以Enjoy这个外置的Dressing系统！
+_SIREN_ 全称 _SIREN Is Redressing the Entire Navy_ 。还在因为电脑上需要安装模拟器来游玩的烦恼吗？感觉玩皮肤的时候关卡等功能都很多余？使用本项目即可无需这些繁琐的步骤，只需要连接你的手机(使用数据线或者远程调试都可以)，开启adb调试之后，就可以Enjoy这个外置的Dressing系统！想在手机上直接跑、连电脑都省掉？`mobile` 分支还提供了独立的 Android 应用版（见 [使用](#使用) 的「Android 应用」一节）。
 
 - [azurlane.md](docs/azurlane.md) — 游戏资源格式与交互状态机原理
 - [unpack.md](docs/unpack.md) — 提取脚本 `extract.js` 的用法、产物与转换细节
@@ -143,6 +143,10 @@ node scripts/pull_bundles.js --index   # 刷新 .tmp/hashes-live2d.csv 等索引
 node scripts/pull_lua.js               # 刷新 .tmp/lua/ 快照
 node scripts/gen_catalog.js            # 重新生成 public/catalog.json
 ```
+
+### Android 应用（mobile 分支）
+
+`mobile` 分支在主分支之上叠加 Capacitor Android 壳，把查看器打包为独立 Android 应用：整条"拉取 → 解包烘焙 → 上屏"链路在手机本地闭环，无需电脑、模拟器或 adb 数据线。详见该分支的 README。
 
 ## 测试
 
