@@ -1,7 +1,7 @@
 // unityfs-js 适配层：bundle 载入、typetree 读取（含缓存）、对象枚举与按 pathID 索引。
 // typetree 字段名与 Unity 序列化一致（m_*）；int64 路径 ID 在 JSON 里是十进制字符串，统一转 BigInt。
+// 本模块平台无关：字节入口由 api.js（内存）或 node-io.js（文件）提供。
 
-import { readFileSync } from "node:fs";
 import { load } from "unityfs-js";
 
 // typetree 里 SInt64 PPtr 目标是十进制字符串（小值是 number），统一转 BigInt 以与 ObjectInfo.pathID 同域
@@ -44,10 +44,10 @@ export class Bundle {
   }
 }
 
-export async function loadBundle(path) {
-  // new Uint8Array(buffer) 拷出精确大小的 ArrayBuffer：readFileSync 的小文件走 8KB Buffer 池，
-  // 直接传 Buffer 时 unityfs-js 取 source.buffer 会带上池内偏移，解析出 undefined
-  const manager = await load(new Uint8Array(readFileSync(path)));
+export async function loadBundleFromBytes(bytes) {
+  // bytes 必须是精确大小的 Uint8Array：带池偏移的视图会让 unityfs-js 取 source.buffer
+  // 时带上偏移，解析出 undefined（调用方负责，node-io.js 的读盘入口已做拷贝归一）
+  const manager = await load(bytes);
   return new Bundle(manager);
 }
 

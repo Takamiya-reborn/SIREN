@@ -1,19 +1,19 @@
 // Unity AnimationClip -> Cubism motion3 曲线：流式/稠密/常量三段解码、CRC32 哈希绑定解析、
 // 交互状态首末值提取。字段名与 Unity 序列化 typetree 一致（m_* 或绑定用平名）。
 
-import zlib from "node:zlib";
+import { crc32 as crc32Bytes } from "./bytes.js";
 
 // 曲线 attribute 也是 CRC32 哈希，本游戏用到三种：
 //   Value         -> 参数曲线（Target: Parameter）
 //   Opacity       -> 部件不透明度曲线（Target: PartOpacity；根对象 CubismRenderController 的整模型透明度单独特判）
 //   MouthOpening  -> 根对象 CubismMouthController.MouthOpening，游戏 LateUpdate 按 BlendMode 覆写口参数，迁移为口参数的参数曲线
 // 其余 attribute 视为未知，跳过并告警（原始绑定保留在 inventory.json）
-export const CRC_VALUE = zlib.crc32(Buffer.from("Value")) >>> 0;
-export const CRC_OPACITY = zlib.crc32(Buffer.from("Opacity")) >>> 0;
-export const CRC_MOUTH = zlib.crc32(Buffer.from("MouthOpening")) >>> 0;
+export const CRC_VALUE = crc32Bytes("Value");
+export const CRC_OPACITY = crc32Bytes("Opacity");
+export const CRC_MOUTH = crc32Bytes("MouthOpening");
 
 export function crc32(s) {
-  return zlib.crc32(Buffer.from(s, "utf8")) >>> 0;
+  return crc32Bytes(s);
 }
 
 // ---------------------------------------------------------------- Unity 流式曲线解码
@@ -31,22 +31,23 @@ function calculateNextInSlope(key, dx, rhs) {
 
 // 流式段原始 u32 数组 -> 帧列表 [{time, keys:[{index, value, outSlope, inSlope}]}]
 export function readStreamedFrames(u32Data) {
-  const buf = Buffer.alloc(u32Data.length * 4);
+  const u8 = new Uint8Array(u32Data.length * 4);
+  const dv = new DataView(u8.buffer);
   for (let i = 0; i < u32Data.length; i++)
-    buf.writeUInt32LE(u32Data[i] >>> 0, i * 4);
+    dv.setUint32(i * 4, u32Data[i] >>> 0, true);
   const frames = [];
   let pos = 0;
   const f32 = () => {
-    const v = buf.readFloatLE(pos);
+    const v = dv.getFloat32(pos, true);
     pos += 4;
     return v;
   };
   const i32 = () => {
-    const v = buf.readInt32LE(pos);
+    const v = dv.getInt32(pos, true);
     pos += 4;
     return v;
   };
-  while (pos < buf.length) {
+  while (pos < u8.length) {
     const time = f32();
     const numKeys = i32();
     const keys = [];

@@ -1,19 +1,14 @@
-// Ani（spine）皮肤烘焙：spinepainting/<painting> 主 bundle（SkeletonGraphic 预制体）
+// Ani（spine）皮肤烘焙（平台无关）：spinepainting/<painting> 主 bundle（SkeletonGraphic 预制体）
 // + <painting>_res（SkeletonDataAsset / SpineAtlasAsset / .skel / .atlas / Texture2D）
-// -> models/<角色>/<皮肤>/ 下的 <皮肤>.spine.json 元数据 + 各骨架变体 <变体>.json
-//（spine 3.8 JSON，spineSkel.toSpine38Json 转换）+ <变体>.atlas + 贴图 PNG。
+// -> <皮肤>.spine.json 元数据 + 各骨架变体 <变体>.json
+//（spine 3.8 JSON，spineSkel.toSpine38Json 转换）+ <变体>.atlas + 贴图。
+// 产物经 sink(relPath, bytes) 收集（CLI 落盘 / 移动端进内存 FileStore），贴图编码由
+// emitImage 钩子注入（CLI 解码出 PNG 字节，移动端 ASTC 原始块直通）。
 //
 // 注意：.skel/.atlas 的 TextAsset 必须经 info.object.data 取原始字节，
 // typetree 的 m_Script 经 UTF-8 解码已毁二进制段（详见 spineSkel.js 头注）。
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-
-import { loadBundle } from "./bundle.js";
-import { isAstcFormat, decodeAstcTexture } from "./texture.js";
 import { parseSkel, toSpine38Json } from "./spineSkel.js";
-
-const progress = (pct, label) => console.log(`[progress] ${pct} ${label}`);
 
 /** 主 bundle 是否 spine（MonoScript 表里有 SkeletonGraphic 而非 Cubism 全家桶）。 */
 export function isSpineBundle(bundle) {
@@ -148,18 +143,19 @@ function resolveHitAreaRect(mainBundle) {
 }
 
 /**
- * 烘焙 spine 皮肤到 outDir。mainBundle 是主 bundle（已加载），resBundle 是
+ * 烘焙 spine 皮肤。mainBundle 是主 bundle（已加载），resBundle 是
  * <painting>_res bundle（已加载；changeskin 转场类无 _res 依赖对时传 mainBundle 本身）。
+ * sink(relPath, bytes)：relPath 相对皮肤输出目录；emitImage(info, res) 返回 { name, bytes }
+ * （name 含扩展名，同时是 atlas 页名映射的落盘名）；onProgress(pct, label) 同 CLI 进度语义。
  * 返回 spine.json 元数据对象。
  */
 export async function bakeSpine(
-  outDir,
   modelId,
   mainBundle,
   resBundle,
   displayName,
+  { sink, emitImage, onProgress = () => {}, warn = console.warn },
 ) {
-  mkdirSync(outDir, { recursive: true });
   const res = resBundle;
 
   // --- 变体表：res 内全部 SkeletonDataAsset，skeletonJSON -> TextAsset(.skel)、atlasAssets -> .atlas
@@ -196,7 +192,7 @@ export async function bakeSpine(
     const variant = skeletonName.replace(/_SkeletonData$/, "");
     const skel = textAssets.get(BigInt(tree.skeletonJSON.m_PathID));
     if (!skel) {
-      console.warn(`[warn] ${variant}: skeletonJSON 引用落空，跳过`);
+      warn(`${variant}: skeletonJSON 引用落空，跳过`);
       continue;
     }
     const atlasRef = tree.atlasAssets[0];
@@ -225,14 +221,15 @@ export async function bakeSpine(
     });
   }
   if (!variants.length)
-    throw new Error(`未找到 SkeletonDataAsset（${resPath}）`);
+    throw new Error("未找到 SkeletonDataAsset（_res bundle）");
 
   // --- 骨架解析 + spine 3.8 JSON 落盘（原始 .skel 一并归档，字节与包内 TextAsset 一致）
   let canvas = null;
+  const encoder = new TextEncoder();
   for (const [index, v] of variants.entries()) {
     const raw = textByName(v.skeleton)?.data;
     if (!raw) throw new Error(`骨架文件缺失: ${v.skeleton}`);
-    const parsed = parseSkel(Buffer.from(raw));
+    const parsed = parseSkel(raw);
     v.canvas = {
       x: parsed.x,
       y: parsed.y,
@@ -245,12 +242,9 @@ export async function bakeSpine(
     if (v.default || !canvas) canvas = v.canvas;
     v.skeleton = `${v.variant}.json`;
     v.raw = `${v.variant}.skel`;
-    writeFileSync(
-      join(outDir, v.skeleton),
-      JSON.stringify(toSpine38Json(parsed)),
-    );
-    writeFileSync(join(outDir, v.raw), Buffer.from(raw));
-    progress(
+    sink(v.skeleton, encoder.encode(JSON.stringify(toSpine38Json(parsed))));
+    sink(v.raw, raw);
+    onProgress(
       10 + Math.round((30 * (index + 1)) / variants.length),
       `骨架 ${v.variant}`,
     );
@@ -261,7 +255,12 @@ export async function bakeSpine(
   // 归一化 UV 不受影响），按比例缩写该页全部区域坐标到贴图实际像素——pixi-spine 的
   // region frame 按像素裁剪，坐标越出贴图即抛 "frame does not fit"
   const texDims = new Map(
-    res.byClass("Texture2D").map((info) => [`${info.name}.png`, { w: info.object.width, h: info.object.height }]),
+    res
+      .byClass("Texture2D")
+      .map((info) => [
+        `${info.name}.png`,
+        { w: info.object.width, h: info.object.height },
+      ]),
   );
   for (const v of variants) {
     if (!v.atlas) throw new Error(`变体 ${v.variant} 的 atlas 引用落空`);
@@ -269,30 +268,26 @@ export async function bakeSpine(
     // 贴图是预乘 alpha（spine PMA 导出，游戏材质按 PMA 混合）；spine-unity 的 PMA 标志
     // 在材质 shader 上，TextAsset 原文没有该行，写入后 pixi-spine 把页面标为
     // ALPHA_MODES.PMA，上传时不再做二次预乘（否则羽化边缘发黑）。
-    const text = scaleAtlasPages(new TextDecoder().decode(atlasText.data), texDims)
-      .replace(/^repeat:.+$/gm, (line) => `${line}\npma: true`);
-    writeFileSync(join(outDir, v.atlas), Buffer.from(text, "utf8"));
+    const text = scaleAtlasPages(
+      new TextDecoder().decode(atlasText.data),
+      texDims,
+    ).replace(/^repeat:.+$/gm, (line) => `${line}\npma: true`);
+    sink(v.atlas, encoder.encode(text));
   }
   for (const v of variants) delete v.atlasPathId;
   const textures = res.byClass("Texture2D");
   for (const [index, info] of textures.entries()) {
-    const tex = info.object;
-    // spine atlas 文件是标准 spine 约定（y 自顶部），spine-unity 在内部做 UV 转换适配
-    // Unity 自底向上的纹理行序；pixi-spine 无此转换，须落标准 top-down PNG。
-    // ASTC 路径默认翻转，非 ASTC 路径 exportFile 内部同样翻转，两路径行序一致
-    const png = isAstcFormat(tex.textureFormat)
-      ? (await decodeAstcTexture(tex, res.manager)).png
-      : Buffer.from(
-          (await res.manager.exportFile(info, { type: "uint8Array" })).data.raw,
-        );
-    writeFileSync(join(outDir, `${info.name}.png`), png);
-    progress(
+    // 贴图编码由 emitImage 钩子注入（CLI 解码 top-down PNG，移动端 ASTC 原始块直通）；
+    // atlas 页名与落盘名的对应关系由 name 承载，非 PNG 形态时页名改写属注入层职责
+    const { name, bytes } = await emitImage(info, res);
+    sink(name, bytes);
+    onProgress(
       40 + Math.round((40 * (index + 1)) / textures.length),
       `贴图 ${index + 1}/${textures.length}`,
     );
   }
 
-  progress(90, "写元数据");
+  onProgress(90, "写元数据");
   const meta = {
     type: "spine",
     painting: modelId,
@@ -310,16 +305,8 @@ export async function bakeSpine(
       .map((v) => v.variant);
     for (const v of variants) delete v.__partIndex;
   }
-  writeFileSync(
-    join(outDir, `${modelId}.spine.json`),
-    JSON.stringify(meta, null, 2),
-  );
+  sink(`${modelId}.spine.json`, encoder.encode(JSON.stringify(meta, null, 2)));
   return meta;
-}
-
-/** spine 皮肤目录守卫：模型目录是否已含 spine 元数据（供扫描/清理判断）。 */
-export function hasSpineMeta(dir, modelId) {
-  return existsSync(join(dir, `${modelId}.spine.json`));
 }
 
 /** 转场镜头安全区：主画面四边形（最大附件，经其骨骼祖先链 setup 变换 + 链上动画
@@ -353,7 +340,8 @@ function cameraCoverRects(parsed) {
       if (!chain.includes(tl.boneIndex)) continue;
       const boneName = parsed.bones[tl.boneIndex].name;
       if (tl.type === 2) tls.scale.push({ bone: boneName, frames: tl.frames });
-      if (tl.type === 1) tls.translate.push({ bone: boneName, frames: tl.frames });
+      if (tl.type === 1)
+        tls.translate.push({ bone: boneName, frames: tl.frames });
       for (const f of tl.frames) tls.times.add(f.time);
     }
     animTls.set(anim.name, tls);
@@ -363,9 +351,14 @@ function cameraCoverRects(parsed) {
   // 返回 {a,b,c,d,tx,ty}（x' = a·x + c·y + tx, y' = b·x + d·y + ty）
   const compose = (M, bone, sxMul, syMul) => {
     const rad = (bone.rotation * Math.PI) / 180;
-    const cos = Math.cos(rad), sin = Math.sin(rad);
-    const sx = bone.scaleX * sxMul, sy = bone.scaleY * syMul;
-    const a = sx * cos, b = sx * sin, c = -sy * sin, d = sy * cos;
+    const cos = Math.cos(rad),
+      sin = Math.sin(rad);
+    const sx = bone.scaleX * sxMul,
+      sy = bone.scaleY * syMul;
+    const a = sx * cos,
+      b = sx * sin,
+      c = -sy * sin,
+      d = sy * cos;
     return {
       a: M.a * a + M.c * b,
       b: M.b * a + M.d * b,
@@ -389,18 +382,36 @@ function cameraCoverRects(parsed) {
   const hh = ((att.height ?? 0) * (att.scaleY ?? 1)) / 2;
   const rad = ((att.rotation ?? 0) * Math.PI) / 180;
   const quad = [
-    [att.x - hw * Math.cos(rad) + hh * Math.sin(rad), att.y - hw * Math.sin(rad) - hh * Math.cos(rad)],
-    [att.x + hw * Math.cos(rad) + hh * Math.sin(rad), att.y + hw * Math.sin(rad) - hh * Math.cos(rad)],
-    [att.x + hw * Math.cos(rad) - hh * Math.sin(rad), att.y + hw * Math.sin(rad) + hh * Math.cos(rad)],
-    [att.x - hw * Math.cos(rad) - hh * Math.sin(rad), att.y - hw * Math.sin(rad) + hh * Math.cos(rad)],
+    [
+      att.x - hw * Math.cos(rad) + hh * Math.sin(rad),
+      att.y - hw * Math.sin(rad) - hh * Math.cos(rad),
+    ],
+    [
+      att.x + hw * Math.cos(rad) + hh * Math.sin(rad),
+      att.y + hw * Math.sin(rad) - hh * Math.cos(rad),
+    ],
+    [
+      att.x + hw * Math.cos(rad) - hh * Math.sin(rad),
+      att.y + hw * Math.sin(rad) + hh * Math.cos(rad),
+    ],
+    [
+      att.x - hw * Math.cos(rad) - hh * Math.sin(rad),
+      att.y - hw * Math.sin(rad) + hh * Math.cos(rad),
+    ],
   ];
   const localToWorld = (M, pt) => ({
     x: M.a * pt[0] + M.c * pt[1] + M.tx,
     y: M.b * pt[0] + M.d * pt[1] + M.ty,
   });
   const rectOf = (corners) => {
-    const xs = corners.map((p) => p.x), ys = corners.map((p) => p.y);
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    const xs = corners.map((p) => p.x),
+      ys = corners.map((p) => p.y);
+    return {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      w: Math.max(...xs) - Math.min(...xs),
+      h: Math.max(...ys) - Math.min(...ys),
+    };
   };
 
   const S = 0.01; // 解析 scale，与挂载层一致
@@ -436,7 +447,8 @@ function cameraCoverRects(parsed) {
       const scaled = { x: r.x * S, y: r.y * S, w: r.w * S, h: r.h * S };
       if (!inter) inter = { ...scaled };
       else {
-        const l = Math.max(inter.x, scaled.x), t2 = Math.max(inter.y, scaled.y);
+        const l = Math.max(inter.x, scaled.x),
+          t2 = Math.max(inter.y, scaled.y);
         const r2 = Math.min(inter.x + inter.w, scaled.x + scaled.w);
         const b2 = Math.min(inter.y + inter.h, scaled.y + scaled.h);
         inter = { x: l, y: t2, w: r2 - l, h: b2 - t2 };
@@ -450,7 +462,8 @@ function cameraCoverRects(parsed) {
 function sampleAt(frames, t, key) {
   if (t <= frames[0].time) return frames[0][key];
   for (let i = 0; i < frames.length - 1; i++) {
-    const a = frames[i], b = frames[i + 1];
+    const a = frames[i],
+      b = frames[i + 1];
     if (t >= a.time && t <= b.time) {
       const k = (t - a.time) / (b.time - a.time || 1);
       return a[key] + (b[key] - a[key]) * k;
@@ -471,15 +484,20 @@ function scaleAtlasPages(text, texDims) {
     while (nameLine >= 0 && !lines[nameLine].trim()) nameLine--;
     const tex = texDims.get(lines[nameLine]?.trim());
     if (!tex) continue;
-    const dw = parseInt(m[1]), dh = parseInt(m[2]);
+    const dw = parseInt(m[1]),
+      dh = parseInt(m[2]);
     if (dw === tex.w && dh === tex.h) continue;
-    const sx = tex.w / dw, sy = tex.h / dh;
+    const sx = tex.w / dw,
+      sy = tex.h / dh;
     lines[i] = `size: ${tex.w},${tex.h}`;
     for (let j = i + 1; j < lines.length; j++) {
       if (/^size:\s*\d+,\s*\d+/.test(lines[j])) break; // 下一页的页面 size（页名隔在中间）
-      const mm = lines[j].match(/^(\s*)(xy|size|orig|offset|bounds|pad):\s*(-?\d+),\s*(-?\d+)/);
+      const mm = lines[j].match(
+        /^(\s*)(xy|size|orig|offset|bounds|pad):\s*(-?\d+),\s*(-?\d+)/,
+      );
       if (mm)
-        lines[j] = `${mm[1]}${mm[2]}: ${Math.round(parseInt(mm[3]) * sx)},${Math.round(parseInt(mm[4]) * sy)}`;
+        lines[j] =
+          `${mm[1]}${mm[2]}: ${Math.round(parseInt(mm[3]) * sx)},${Math.round(parseInt(mm[4]) * sy)}`;
     }
   }
   return lines.join("\n");
