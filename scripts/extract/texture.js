@@ -102,16 +102,18 @@ export function readAstcRaw(tex, manager, { flip = true } = {}) {
 }
 
 // readAstcRaw 结果 -> 自定义二进制容器（贴图"文件"形态，供 FileStore/缓存落盘与引擎注入层消费）：
-//   magic "ASTCBIN" | u32 width | u32 height | u16 blockWidth | u16 blockHeight | 原始块数据
-// 全部小端。解析端按 magic 识别（非本容器的贴图文件即 PNG，走常规图片加载）。
+//   magic "ASTCBIN" 7 字节 + 1 字节补齐 | u32 width | u32 height | u16 blockWidth |
+//   u16 blockHeight | 原始块数据，全小端，头 20 字节（8 字节补齐让 u32 字段落在对齐位置）
+// 解析端按 magic 识别（非本容器的贴图文件即 PNG，走常规图片加载），实现见 src/mobile/astcBin.js。
 export function packAstcTexture(raw) {
-  const head = new Uint8Array(18);
-  const dv = new DataView(head.buffer);
+  const head = new Uint8Array(20);
   new TextEncoder().encodeInto("ASTCBIN", head);
-  dv.setUint32(6, raw.width, true);
-  dv.setUint32(10, raw.height, true);
-  dv.setUint16(14, raw.blockWidth, true);
-  dv.setUint16(16, raw.blockHeight, true);
+  head[7] = 0; // 补齐字节
+  const dv = new DataView(head.buffer);
+  dv.setUint32(8, raw.width, true);
+  dv.setUint32(12, raw.height, true);
+  dv.setUint16(16, raw.blockWidth, true);
+  dv.setUint16(18, raw.blockHeight, true);
   const out = new Uint8Array(head.length + raw.data.length);
   out.set(head, 0);
   out.set(raw.data, head.length);

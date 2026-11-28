@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "test": "node scripts/tests/run_all.mjs",
-    "update": "node scripts/update.js"
+    "update": "node scripts/update.js",
+    "apk": "node scripts/build_apk.mjs"
   },
   "dependencies": {
     "@alexaltea/capstone-js": "^5.0.9",

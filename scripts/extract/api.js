@@ -128,6 +128,10 @@ export async function extractSkin(opts) {
 
   // --- Ani（spine）皮肤分支：主 bundle 只有 SkeletonGraphic 预制体，骨架数据在 <painting>_res
   if (isSpineBundle(bundle)) {
+    // spine/changeskin 贴图固定 png：atlas 页名由 .png 键承载（spineBake 的 texDims 与
+    // atlas 文本），astc 直通需页名改写（注入层工作，未落地）；ASTC 页在此走 wasm 解码
+    const spineEmitImage =
+      textureMode === "astc" ? makeEmitImage("png", pngEncode) : emitImage;
     // changeskin 换装转场 prefab（ship_skin_template 的 change_skin.action 指名，如 jianwu3c）：
     // 骨架/图集/贴图全部内嵌主 bundle，无 _res 依赖对。烘到全局共享目录 changeskin/<action>/
     if (!resBundleBytes) {
@@ -137,7 +141,7 @@ export async function extractSkin(opts) {
       const dir = `changeskin/${id}`;
       const meta = await bakeSpine(id, bundle, bundle, id, {
         sink: (rel, bytes) => sink(dir, rel, bytes),
-        emitImage,
+        emitImage: spineEmitImage,
         onProgress,
       });
       onProgress(100, "完成");
@@ -155,7 +159,7 @@ export async function extractSkin(opts) {
       spineDisplayName(lua?.shipSkinTemplate, id),
       {
         sink: (rel, bytes) => sink(dir, rel, bytes),
-        emitImage,
+        emitImage: spineEmitImage,
         onProgress,
       },
     );

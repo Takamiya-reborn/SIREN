@@ -4,30 +4,26 @@
 // 桥无关：bundle 字节经 readBundle 流式回调拼接，上游换成内嵌 adb 桥时本模块不动。
 
 import { extractSkin } from "../../scripts/extract/api.js";
-import { readBundle } from "./shizuku.js";
+import { readBundle, sizeOf } from "./shizuku.js";
 import { pngEncode } from "./pngEncode.js";
 import { fileStore, sessionUrl } from "./fileStore.js";
 import { loadLuaSources } from "./lua.js";
+import { detectAstcSupport } from "./astcTexture.js";
 
 // 模型 id -> 角色目录名（与 api.js 同规则）
 const charName = (id) => id.replace(/_\d+$/, "");
 
+// bundle 整读：sizeOf 先行，预分配单缓冲直填（分块数组+整拼会双倍占用峰值内存，
+// 40MB 级 spine bundle 在 WebView 里就是 OOM 距离）
 const readWhole = async (path, onProgress) => {
-  const chunks = [];
-  let size = 0;
+  const size = await sizeOf(path);
+  const out = new Uint8Array(size);
   await readBundle(path, {
     onChunk: (bytes, p) => {
-      chunks.push(bytes);
-      size = p.total;
+      out.set(bytes, p.offset - bytes.length);
       onProgress?.(p);
     },
   });
-  const out = new Uint8Array(size);
-  let at = 0;
-  for (const c of chunks) {
-    out.set(c, at);
-    at += c.length;
-  }
   return out;
 };
 
@@ -39,19 +35,44 @@ const readWhole = async (path, onProgress) => {
  * @returns { sessionId, virtualRoot, meta } virtualRoot 供挂载层作 model URL 基座
  */
 export async function ensureSkin(id, { gameRoot, bundles }, onProgress) {
-  const dir = id.startsWith("changeskin")
-    ? id
-    : `${charName(id)}/${id}`;
+  const dir = id.startsWith("changeskin") ? id : `${charName(id)}/${id}`;
   const entry = bundles.get(id);
   const bundleSize = entry?.size ?? 0;
+  // ASTC 直通按运行时能力翻转（P2a）：支持则贴图不解码直接喂 GPU，提取零 wasm；
+  // 不支持（模拟器等）回退 png 模式。pngEncode 恒传：spine 分支贴图固定 png
+  // （atlas 页名由 .png 键承载），ASTC 页需它解码
+  const textureMode = detectAstcSupport() ? "astc" : "png";
 
-  // 1) cacheDir 命中：直接水合（跳过提取，消除冷启动卡顿）
+  // 1) cacheDir 命中：直接水合（跳过提取，消除冷启动卡顿）。
+  //    缓存可挂载性：astc 产物仅在支持直通的运行时可挂，不支持则弃缓存重提取
+  //    （png 产物恒可挂——两条路径共用 mount 层，只是贴图资源形态不同）
   const hit = await fileStore.hydrate(dir, bundleSize);
-  if (hit) return { sessionId: hit, virtualRoot: sessionUrl(hit, dir), cached: true };
+  if (hit) {
+    if (textureMode === "astc" || !fileStore.hasAstcTextures(hit)) {
+      console.info(`[extract] 缓存命中 ${dir}（${fileStore.sessionFileCount(hit)} 个产物）`);
+      // meta 形态与实时提取路径对齐（App.vue 读 meta.type 选入口文件）：缓存路径
+      // 无提取 meta，按产物文件名判别（spine 皮肤的入口是 <id>.spine.json）
+      return {
+        sessionId: hit,
+        virtualRoot: sessionUrl(hit, dir),
+        cached: true,
+        meta: {
+          type: fileStore.sessionHasFile(hit, `${id}.spine.json`)
+            ? "spine"
+            : "l2d",
+        },
+      };
+    }
+    console.info(`[extract] 弃缓存 ${dir}（astc 产物遇不支持运行时）`);
+    fileStore.revoke(hit);
+  }
 
   // 2) 实时提取：bundle 字节 -> 内存 -> 释放
   const resEntry = bundles.get(`${id}_res`);
   onProgress?.(2, "读取 bundle");
+  console.info(
+    `[extract] 开始 ${id}（主 bundle ${Math.round(bundleSize / 1024 / 1024)}MB，textureMode ${textureMode}）`,
+  );
   const mainBundleBytes = await readWhole(`${gameRoot}/${entry.dir}/${id}`);
   const resBundleBytes = resEntry
     ? await readWhole(`${gameRoot}/${resEntry.dir}/${id}_res`)
@@ -65,9 +86,7 @@ export async function ensureSkin(id, { gameRoot, bundles }, onProgress) {
     id,
     mainBundleBytes,
     resBundleBytes,
-    // ASTC 直通（"astc"）需 P2a 引擎注入（CompressedTextureResource parse 插件）先行，
-    // 注入落地前贴图走浏览器解码（pngEncode = OffscreenCanvas 编码）保证挂载可用
-    textureMode: "png",
+    textureMode,
     lua,
     includeInventory: false,
     pngEncode,

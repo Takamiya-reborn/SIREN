@@ -10,6 +10,7 @@
 | 双形态换装转场（changeskin，探查纪要未定案） | [changeskin.md](changeskin.md) |
 | 动作播放、挂载、交互、物理、视线等运行时行为 | [runtime.md](runtime.md) |
 | 皮肤小游戏（type 13 从动轮 / 15/16 下棋 / 棋盘清盘 / C# 参数覆盖语义） | [minigames.md](minigames.md) |
+| mobile 分支（Android 壳、提取后端、Shizuku 桥等移动端任务） | [mobile.md](mobile.md) |
 | 已知根因对照（现象 → 机制） | [traps.md](traps.md) |
 | 测试命令、布局与编写要求 | [testing.md](testing.md) |
 | 代码风格、资产边界、提交消息（CM）等项目约定 | [conventions.md](conventions.md) |

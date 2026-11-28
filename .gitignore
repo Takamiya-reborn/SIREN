@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+android/local.properties
+android/SIREN.apk
+public/lua
 *.local
 
 # 模型文件不入库，仅保留目录占位

@@ -89,6 +89,22 @@ public class ShizukuFilePlugin extends Plugin {
         call.resolve(out);
     }
 
+    /** JS 诊断日志直进 logcat（SIREN tag）：桥日志关闭（loggingBehavior none）后
+     * console 不再转发，诊断走这条不依赖 Capacitor 日志链的通道 */
+    @PluginMethod
+    public void log(PluginCall call) {
+        String level = call.getString("level", "info");
+        String msg = call.getString("msg", "");
+        if ("error".equals(level)) {
+            android.util.Log.e("SIREN", msg);
+        } else if ("warn".equals(level)) {
+            android.util.Log.w("SIREN", msg);
+        } else {
+            android.util.Log.i("SIREN", msg);
+        }
+        call.resolve();
+    }
+
     @PluginMethod
     public void requestAccess(PluginCall call) {
         if (!Shizuku.pingBinder()) {

@@ -5,7 +5,13 @@
 import { registerPlugin, Capacitor } from "@capacitor/core";
 import { crc32 } from "../../scripts/extract/bytes.js";
 
-const native = registerPlugin("ShizukuFile");
+// 原生代理单例：platform.js 的 console 镜像也复用它（重复 registerPlugin 会告警）
+export const shizukuNative = registerPlugin("ShizukuFile");
+
+const native = shizukuNative;
+
+export const sizeOf = async (path) =>
+  Number((await native.sizeOf({ path })).size);
 
 // 游戏私有目录候选包名（CN/en/jp 三服），files/ 根含 AssetBundles 与索引文件
 const GAME_PACKAGES = [

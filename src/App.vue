@@ -64,6 +64,7 @@ async function pullMobile(target) {
       activeId.value = id
     }
   } catch (e) {
+    console.error('[pull] 提取失败', e?.message ?? e, e?.stack ?? '')
     extractMsg.value = `提取失败: ${e?.message ?? e}`
     await new Promise((r) => setTimeout(r, 3000))
   } finally {
@@ -235,6 +236,10 @@ function playTrigger(id) {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* 全面屏安全区：横屏避开刘海/挖孔与手势条（viewport-fit=cover 才有非零 env 值，
+     非全面屏恒为 0 无副作用），挖孔区露出 body 底色 */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 .stage {
