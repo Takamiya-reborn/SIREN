@@ -42,4 +42,9 @@ export default defineConfig({
   optimizeDeps: {
     include: ["@pixi-spine/all-3.8"],
   },
+  server: {
+    watch: {
+      ignored: ["**/.tmp/**", "**/models/**"],
+    },
+  },
 });

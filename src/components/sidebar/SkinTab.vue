@@ -390,10 +390,10 @@ const {
   border: 1.5px solid #55555e;
 }
 
-/* 卡片网格：固定四列行式条目，样式对齐右侧 StateTab */
+/* 卡片网格：列数随面板宽度自适应（每列至少 180px，放得下几列排几列），样式对齐右侧 StateTab */
 .list {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 10px;
   padding: 4px 20px 24px;
   list-style: none;
