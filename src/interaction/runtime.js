@@ -1,11 +1,10 @@
 /** 交互状态机运行时（InteractionRuntime）：把 interaction.json 实现成显式有向图——节点 = 状态参数的值向量，动作 = 边。协议背景与字段语义见同目录 index.js 头注释。 */
 import { MotionPriority } from "pixi-live2d-display/cubism4";
+import { fetchJson, metaSibling, modelDir } from "../platform/assets.js";
 
 /** 加载与模型同目录的交互状态机数据；缺失（旧产物/无交互的模型）返回 null */
 export async function loadInteraction(modelUrl) {
-  return fetch(modelUrl.replace(/model3\.json$/, "interaction.json"))
-    .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null);
+  return fetchJson(metaSibling(modelUrl, "interaction.json"));
 }
 
 /** 平滑复位窗口缺省值（秒）：mount/l2dMount.js 在 motionStart 时按起播 clip 查 fades.json 的转场时长传入（与新动作的渐入窗口严格同源同值）；这里只是 fades 表缺失/未命中时的兜底，与 motionPatches.js 的 config 渐变兜底同值 */
@@ -198,18 +197,15 @@ export class InteractionRuntime {
     if (!p) {
       const file = this._clipFiles?.get(clip);
       if (!file || this._motionBase == null) return Promise.resolve(null);
-      p = fetch(`${this._motionBase}${file}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((m) => {
-          const out = new Map();
-          for (const c of m?.Curves ?? []) {
-            if (c.Target !== "Parameter") continue;
-            const segs = c.Segments;
-            if (segs?.length >= 2) out.set(c.Id, segs[segs.length - 1]);
-          }
-          return out;
-        })
-        .catch(() => null);
+      p = fetchJson(`${this._motionBase}${file}`).then((m) => {
+        const out = new Map();
+        for (const c of m?.Curves ?? []) {
+          if (c.Target !== "Parameter") continue;
+          const segs = c.Segments;
+          if (segs?.length >= 2) out.set(c.Id, segs[segs.length - 1]);
+        }
+        return out;
+      });
       this._boundaries.set(clip, p);
     }
     return p;
@@ -222,18 +218,15 @@ export class InteractionRuntime {
     if (!p) {
       const file = this._clipFiles?.get(clip);
       if (!file || this._motionBase == null) return Promise.resolve(null);
-      p = fetch(`${this._motionBase}${file}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((m) => {
-          const out = new Set();
-          for (const c of m?.Curves ?? []) {
-            if (c.Target === "Parameter") out.add(c.Id);
-          }
-          this._drivenSet ??= new Map();
-          this._drivenSet.set(clip, out);
-          return out;
-        })
-        .catch(() => null);
+      p = fetchJson(`${this._motionBase}${file}`).then((m) => {
+        const out = new Set();
+        for (const c of m?.Curves ?? []) {
+          if (c.Target === "Parameter") out.add(c.Id);
+        }
+        this._drivenSet ??= new Map();
+        this._drivenSet.set(clip, out);
+        return out;
+      });
       this._driven.set(clip, p);
     }
     return p;
@@ -254,7 +247,7 @@ export class InteractionRuntime {
 
   /** 注入动作文件源（mount/l2dMount.js 在 runtime 创建后调）：记录 model3 同目录基址与 clip -> File 映射，并预热全部 clip 的边界缓存 */
   attachMotions(modelUrl) {
-    this._motionBase = modelUrl.replace(/[^/]*$/, "");
+    this._motionBase = modelDir(modelUrl);
     this._clipFiles = new Map();
     const motions = this.model.internalModel.settings?.motions ?? {};
     for (const defs of Object.values(motions)) {

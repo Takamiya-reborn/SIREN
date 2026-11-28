@@ -6,6 +6,7 @@
  */
 import { Loader } from "pixi.js";
 import { Spine } from "@pixi-spine/all-3.8";
+import { changeskinUrl, fetchJson } from "../../platform/assets.js";
 
 /** 游戏 SkeletonDataAsset 的解析 scale（0.01），与 spineMount 同源 */
 const SKELETON_SCALE = 0.01;
@@ -26,16 +27,10 @@ export async function warmChangeOverlay(action) {
 /** 加载转场骨架（优先命中预热缓存）。目录不存在（该 action 未烘焙）返回 null。 */
 async function loadChangeOverlay(action) {
   if (warmCache.has(action)) return warmCache.get(action);
-  let meta;
-  try {
-    const r = await fetch(`/models/changeskin/${action}/${action}.spine.json`);
-    if (!r.ok) return null;
-    meta = await r.json();
-  } catch {
-    return null;
-  }
+  const meta = await fetchJson(changeskinUrl(action, `${action}.spine.json`));
+  if (!meta) return null;
   const variant = meta.variants[0];
-  const url = `/models/changeskin/${action}/`;
+  const url = changeskinUrl(action);
   try {
     const spine = await new Promise((resolve, reject) => {
       const loader = new Loader();
@@ -170,7 +165,9 @@ export async function playChangeOverlay(ctx, action, index) {
       if (track !== entry) return;
       const n = ev?.data?.name;
       if (!n) return;
-      console.info(`[changeskin] 事件 ${n} @${spine.state.tracks[0]?.animationTime?.toFixed(2) ?? "?"}s`);
+      console.info(
+        `[changeskin] 事件 ${n} @${spine.state.tracks[0]?.animationTime?.toFixed(2) ?? "?"}s`,
+      );
       if (n === "action") settleSwap();
       else if (n === "finish") {
         settleFinish();

@@ -20,15 +20,14 @@ import * as playRoute from "./playRoute.js";
 import * as xiaqi from "./xiaqi.js";
 import * as layers from "./layers.js";
 import * as readouts from "./readouts.js";
+import { fetchJson, metaSibling } from "../platform/assets.js";
 
 /** 井字棋八连线表：真身与下棋逻辑同住 xiaqi.js，此处保持原导出面不变 */
 export { XIAQI_LINES } from "./xiaqi.js";
 
 /** 加载与模型同目录的拖拽参数机配置；缺失（未烘焙/非 L2D 皮肤）返回 null */
 export async function loadL2dConfig(modelUrl) {
-  return fetch(modelUrl.replace(/model3\.json$/, "l2d.json"))
-    .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null);
+  return fetchJson(metaSibling(modelUrl, "l2d.json"));
 }
 
 export class DragOrchestrator {

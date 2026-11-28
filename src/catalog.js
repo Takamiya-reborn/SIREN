@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { fetchAsset, manifestUrl, catalogUrl } from "./platform/assets.js";
 
 /**
  * 皮肤清单（reactive 数组，视图直接可用）。
@@ -14,7 +15,7 @@ export const MODELS = reactive([]);
 /** 拉取皮肤清单（替换语义，重复调用幂等）；失败时仅报错，视图以空清单渲染。 */
 export async function loadModels() {
   try {
-    const r = await fetch("/models/manifest.json");
+    const r = await fetchAsset(manifestUrl());
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     MODELS.splice(0, MODELS.length, ...(await r.json()));
   } catch (err) {
@@ -37,7 +38,7 @@ export const CATALOG = reactive({ version: "", entries: [] });
 /** 拉取皮肤目录（dev server /api/catalog 在静态目录上合并实时资源状态）；失败仅报错，侧栏回退为只显示已烘焙清单。 */
 export async function loadCatalog() {
   try {
-    const r = await fetch("/api/catalog");
+    const r = await fetchAsset(catalogUrl());
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     CATALOG.version = data.version ?? "";

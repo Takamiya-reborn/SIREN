@@ -1,5 +1,6 @@
 /** L2D 挂载链：Live2DModel.from -> 依序装配氛围层、交互状态机、拖拽参数机 -> 初始 idle -> 取景适配 -> 揭幕。写回 ctx.model / ctx.runtime / ctx.orch / ctx.l2dOffset / ctx.fades。揭幕闸门/揭幕序列在 reveal.js、锚点取证与帧探针在 diagnostics.js。 */
 import { Live2DModel } from "pixi-live2d-display/cubism4";
+import { fetchJson, metaSibling } from "../../platform/assets.js";
 import { installColorPatch } from "../fx/colorPatches";
 import { installPalette } from "../fx/palette";
 import { loadAmbient } from "../fx/ambient";
@@ -72,9 +73,7 @@ export async function mountL2dModel(ctx, url) {
   model.visible = false;
   // 逐 clip 转场时长表（<id>.fades.json，extract.js 的 animatorFades 从 bundle 的 AnimatorController 提取）：motionPatches.createMotion 按它设置动作渐入时长，动作起播的复位缓动窗口也取同一值——两处严格同源
   // 缺失时全旁路（渐变走 config 兜底 300ms、复位走 RESET_FADE 兜底）
-  ctx.fades = await fetch(url.replace(/model3\.json$/, "fades.json"))
-    .then((r) => (r.ok ? r.json() : null))
-    .catch(() => null);
+  ctx.fades = await fetchJson(metaSibling(url, "fades.json"));
   if (stale()) {
     model.destroy();
     return;

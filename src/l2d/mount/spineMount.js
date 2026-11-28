@@ -10,6 +10,7 @@
  */
 import { Container, Loader } from "pixi.js";
 import { Spine, SpineParser } from "@pixi-spine/all-3.8";
+import { fetchJsonStrict, modelDir } from "../../platform/assets.js";
 import { expressionOverlays } from "../spine/expressions.js";
 import { fitSpine, SKELETON_SCALE } from "./spineFit.js";
 import { waitRevealGate } from "./reveal.js";
@@ -44,14 +45,11 @@ async function mountSpineInner(ctx, url, variantOverride) {
   if (!ctx._revealHold) ctx._holdPose = null;
 
   // 元数据：分区表（parts，分层预制体组装序）与骨架变体表（spineBake.js 产物）
-  const meta = await fetch(url).then((r) => {
-    if (!r.ok) throw new Error(`spine 元数据 HTTP ${r.status}`);
-    return r.json();
-  });
+  const meta = await fetchJsonStrict(url);
   if (stale()) return;
   ctx._spineMeta = meta;
   ctx._spineUrl = url;
-  const base = url.replace(/[^/]*$/, "");
+  const base = modelDir(url);
 
   // pixi-spine 的 ESM 在 import 时自动把解析中间件注册进 Loader 全局插件表
   //（all-3.8.es.js 尾部的 registerLoaderPlugin），此处不再手动挂载——重复注册会让

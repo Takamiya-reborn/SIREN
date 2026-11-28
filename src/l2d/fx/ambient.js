@@ -3,6 +3,8 @@
 // pixi-live2d-display 的动作队列一次只能播一支动作，无法天然叠加两支，这里按 motion3.json 曲线逐帧采样后直写参数，与游戏内表现一致。
 // effect 参数可以与其他动作重叠（zhenzhuhao_2 全部动作都驱动五体系列）：游戏内观感是本层值赢（动作里同参数曲线是导出时烘焙的副本）；物理与姿态系统不触碰 effect 参数，不会与本层互相覆盖。
 
+import { fetchAsset, siblingModelUrl } from "../../platform/assets.js";
+
 /** 三次贝塞尔 B(s)，用于 motion3 贝塞尔段求值 */
 function bezier(a, b, c, d, s) {
   const u = 1 - s;
@@ -79,10 +81,9 @@ function sampleCurve(segments, t) {
 export async function loadAmbient(modelUrl, settings) {
   const file = settings.motions?.effect?.[0]?.File;
   if (!file) return null;
-  // modelUrl 可能是站内绝对路径（"/models/..."），需先经 location 解析为绝对 URL
-  const data = await (
-    await fetch(new URL(file, new URL(modelUrl, window.location.href)))
-  ).json();
+  const data = await fetchAsset(siblingModelUrl(modelUrl, file)).then((r) =>
+    r.json(),
+  );
   const duration = data.Meta?.Duration;
   const curves = (data.Curves ?? []).filter((c) => c.Target === "Parameter");
   if (!duration || !curves.length) return null;
