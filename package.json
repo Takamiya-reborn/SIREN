@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@alexaltea/capstone-js": "^5.0.9",
+    "@capacitor/core": "^8.6.3",
+    "@capacitor/filesystem": "^8.1.6",
     "@pixi-spine/all-3.8": "^3.0.10",
     "lucide-vue-next": "^0.577.0",
     "pixi-live2d-display": "^0.4.0",
@@ -20,6 +22,8 @@
     "vue": "^3.5.42"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.6.3",
+    "@capacitor/cli": "^8.6.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "vite": "^8.3.4"
   }
