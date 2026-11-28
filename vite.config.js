@@ -42,4 +42,12 @@ export default defineConfig({
   optimizeDeps: {
     include: ["@pixi-spine/all-3.8"],
   },
+  // .tmp（管线工作目录，含 gradle-home 等 4 万文件）与 models/（烘焙产物）不参与
+  // HMR：chokidar 默认整树建 watch，几千个 fs.watch 句柄会吃满事件循环拖垮
+  // 首屏模块转换；模型是 no-cache 直读磁盘，刷新页面即可拿到新烘焙
+  server: {
+    watch: {
+      ignored: ["**/.tmp/**", "**/models/**"],
+    },
+  },
 });
