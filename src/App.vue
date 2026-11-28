@@ -1,11 +1,17 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { Capacitor } from '@capacitor/core'
 import FormToggle from './components/FormToggle.vue'
 import L2dStage from './components/stage/L2dStage.vue'
 import PullDialog from './components/PullDialog.vue'
 import SkinTab from './components/sidebar/SkinTab.vue'
 import StateTab from './components/sidebar/StateTab.vue'
 import { CATALOG, MODELS, TRIGGER_LABELS, TRIGGER_ORDER, campLabel, loadModels } from './catalog'
+import './mobile/platform.js'
+import { ensureSkin } from './mobile/extractor.js'
+import { getDeviceContext, markReady } from './mobile/manifest.js'
+
+const isMobile = Capacitor.isNativePlatform()
 
 const activeId = ref(MODELS[0]?.id ?? '')
 
@@ -31,6 +37,46 @@ watch(activeId, () => {
 
 /** 待拉取确认的皮肤条目（SkinTab 灰色条目/形态开关点击时设置，PullDialog 关闭时清空）；form 标记发起来源（'ani' = 形态开关的 spine 侧按需拉取） */
 const pullTarget = ref(null)
+
+// App 内提取：产物直接进内存 FileStore（cacheDir 透明加速），不经桌面 PullDialog 的 adb 流程
+const extracting = ref(false)
+const extractMsg = ref('')
+
+async function pullMobile(target) {
+  if (extracting.value) return
+  const id = target.id
+  const fromForm = target.form === 'ani'
+  extracting.value = true
+  extractMsg.value = '读取 bundle…'
+  try {
+    const ctx = getDeviceContext()
+    if (!ctx) throw new Error('设备资源不可达（Shizuku 未就绪）')
+    const { virtualRoot, meta } = await ensureSkin(id, ctx, (pct, label) => {
+      extractMsg.value = `${label} ${pct}%`
+    })
+    // 入口文件按产物形态：L2D 是 model3.json，spine 是 spine.json（changeskin 不进侧栏）
+    const entryFile = meta.type === 'spine' ? `${id}.spine.json` : `${id}.model3.json`
+    markReady(id, target.label ?? id, `${virtualRoot}${entryFile}`)
+    pullTarget.value = null
+    if (fromForm && activeId.value && CATALOG.entries.some((e) => e.painting === activeId.value)) {
+      await setForm('ani')
+    } else {
+      activeId.value = id
+    }
+  } catch (e) {
+    extractMsg.value = `提取失败: ${e?.message ?? e}`
+    await new Promise((r) => setTimeout(r, 3000))
+  } finally {
+    extracting.value = false
+    extractMsg.value = ''
+  }
+}
+
+/** 拉取入口分流：App 内走内存提取，桌面走 PullDialog 确认（adb 拉取 + 烘焙落盘） */
+function onPullRequest(target) {
+  if (isMobile) pullMobile(target)
+  else pullTarget.value = target
+}
 
 /**
  * 形态切换编排（L2D↔ANI 胶囊入口）：置揭幕闸门后换挂提前开跑，目标形态的加载与换出
@@ -176,9 +222,10 @@ function playTrigger(id) {
     <L2dStage v-if="activeModel" ref="stageRef" class="stage" :key="activeId" :model-url="activeModel.url"
       @motions="onStageMotions" />
     <FormToggle v-if="isDual && activeModel" :form="activeForm" :switching="switching" @change="setForm" />
-    <SkinTab v-model="activeId" :tabs="tabs" title="皮肤列表" @pull-request="pullTarget = $event" />
+    <SkinTab v-model="activeId" :tabs="tabs" title="皮肤列表" @pull-request="onPullRequest" />
     <StateTab :items="triggerItems" :active="activeTrigger" title="状态触发" @select="playTrigger" />
     <PullDialog :target="pullTarget" @close="pullTarget = null" @baked="onBaked" />
+    <div v-if="extracting" class="extract-chip">{{ extractMsg }}</div>
   </div>
 </template>
 
@@ -193,5 +240,18 @@ function playTrigger(id) {
 .stage {
   width: 100%;
   height: 100%;
+}
+
+.extract-chip {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 50;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(20, 24, 32, 0.86);
+  color: #dfe5ee;
+  font-size: 12px;
+  pointer-events: none;
 }
 </style>
