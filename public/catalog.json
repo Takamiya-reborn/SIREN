@@ -169,11 +169,6 @@
       "camp": 8
     },
     {
-      "painting": "moluotuofu_2",
-      "name": "moluotuofu_2",
-      "derived": true
-    },
-    {
       "painting": "chuixue_3",
       "name": "Music Pixy",
       "ship_group": 30101,
@@ -234,13 +229,6 @@
       "ani": true,
       "l2d": false,
       "camp": 4
-    },
-    {
-      "painting": "xinuopu_2",
-      "name": "xinuopu_2",
-      "derived": true,
-      "ani": true,
-      "l2d": false
     },
     {
       "painting": "z23",
@@ -656,6 +644,15 @@
       "ani": true,
       "l2d": false,
       "camp": 5
+    },
+    {
+      "painting": "xinuopu_2",
+      "name": "沉溺妄想",
+      "ship_group": 70510,
+      "skin_id": 705101,
+      "ani": true,
+      "l2d": false,
+      "camp": 7
     },
     {
       "painting": "ougen_6",
@@ -1495,14 +1492,6 @@
       "camp": 106
     },
     {
-      "painting": "keliaopeitela_3",
-      "name": "克利奥佩特拉（改造）",
-      "derived": true,
-      "ani": true,
-      "l2d": false,
-      "camp": 2
-    },
-    {
       "painting": "lafei",
       "name": "拉菲",
       "ship_group": 10117,
@@ -2031,6 +2020,15 @@
       "camp": 8
     },
     {
+      "painting": "keliaopeitela_3",
+      "name": "清凉的祝福试炼",
+      "ship_group": 20235,
+      "skin_id": 202352,
+      "ani": true,
+      "l2d": false,
+      "camp": 2
+    },
+    {
       "painting": "bojiateli_2",
       "name": "情感数据维护中",
       "ship_group": 70210,
@@ -2427,6 +2425,13 @@
       "ani": true,
       "l2d": false,
       "camp": 4
+    },
+    {
+      "painting": "moluotuofu_2",
+      "name": "水上微醺",
+      "ship_group": 70213,
+      "skin_id": 702131,
+      "camp": 7
     },
     {
       "painting": "aisaikesi_9",
